@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.DistributionFlowMapper">
+
+    <sql id="distributionFlowFilters">
+        WHERE do.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.order_type = 'daily_room'
+        <if test="bookingStart != null">
+            AND om.created_at &gt;= #{bookingStart}
+        </if>
+        <if test="bookingEndExclusive != null">
+            AND om.created_at &lt; #{bookingEndExclusive}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                om.order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.out_order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_name LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_mobile LIKE CONCAT('%', #{keyword}, '%')
+                OR rc.name LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="breakTemp != null">
+            <choose>
+                <when test="breakTemp">
+                    AND COALESCE(TRIM(om.remark), '') = '置换订单'
+                </when>
+                <otherwise>
+                    AND COALESCE(TRIM(om.remark), '') != '置换订单'
+                </otherwise>
+            </choose>
+        </if>
+        <if test="settledState != null and settledState != ''">
+            AND do.settlement_status = #{settledState}
+        </if>
+    </sql>
+
+    <select id="countPage" resultType="long">
+        SELECT COUNT(1)
+        FROM distribution_order do
+        JOIN order_main om ON om.order_id = do.source_order_id
+            AND om.camp_id = do.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        <include refid="distributionFlowFilters"/>
+    </select>
+
+    <select id="selectPage" resultType="com.jeez.zp.platform.vo.DistributionFlowQueryRowVO">
+        SELECT
+            COALESCE(om.out_order_no, om.order_no, CAST(om.order_id AS CHAR)) AS orderNo,
+            om.guest_name AS customerName,
+            om.guest_mobile AS customerPhone,
+            rc.name AS roomCategoryName,
+            DATE_FORMAT(om.created_at, '%Y-%m-%d %H:%i:%s') AS bookedTime,
+            COALESCE(om.total_pay_price_cent, om.total_price_cent, 0) AS invoicePriceCent,
+            COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) AS commissionCent,
+            CASE
+                WHEN om.settlement_amount_cent > 0 THEN om.settlement_amount_cent
+                ELSE GREATEST(
+                    COALESCE(om.total_pay_price_cent, om.total_price_cent, 0) - COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                    0
+                )
+            END AS incomePriceCent,
+            CASE
+                WHEN do.settlement_status = 'settled' THEN
+                    CASE
+                        WHEN om.settlement_amount_cent > 0 THEN om.settlement_amount_cent
+                        ELSE GREATEST(
+                            COALESCE(om.total_pay_price_cent, om.total_price_cent, 0) - COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                            0
+                        )
+                    END
+                ELSE 0
+            END AS settledPriceCent,
+            do.settlement_status AS settledState,
+            CASE
+                WHEN COALESCE(TRIM(om.remark), '') = '置换订单' THEN TRUE
+                ELSE FALSE
+            END AS breakTemp
+        FROM distribution_order do
+        JOIN order_main om ON om.order_id = do.source_order_id
+            AND om.camp_id = do.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        <include refid="distributionFlowFilters"/>
+        ORDER BY om.created_at ASC, om.order_id ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="selectCampName" resultType="java.lang.String">
+        SELECT c.name
+        FROM pms_camp c
+        WHERE c.camp_id = #{campId}
+          AND c.is_deleted = 0
+        LIMIT 1
+    </select>
+</mapper>

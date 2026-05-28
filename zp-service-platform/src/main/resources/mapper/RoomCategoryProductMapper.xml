@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.RoomCategoryProductMapper">
+
+    <sql id="productRowFrom">
+        FROM distribution_product dp
+        JOIN goods_main gm ON gm.goods_id = dp.goods_id
+            AND gm.camp_id = dp.camp_id
+            AND gm.is_deleted = 0
+        JOIN goods_room_category_rel grr ON grr.goods_id = gm.goods_id
+        JOIN room_category rc ON rc.room_category_id = grr.room_category_id
+            AND rc.camp_id = gm.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        JOIN (
+            SELECT
+                rel.camp_id AS camp_id,
+                rel.room_category_id AS room_category_id,
+                ca.channel_id AS channel_id,
+                ca.channel_name AS channel_name,
+                MIN(ca.account_id) AS sort_account_id
+            FROM channel_room_category_rel rel
+            JOIN channel_account ca ON ca.account_id = rel.account_id
+                AND ca.camp_id = rel.camp_id
+            WHERE ca.status = 'authorized'
+              AND rel.shelf_status = 'on_shelf'
+              AND rel.audit_status = 'approved'
+            GROUP BY rel.camp_id, rel.room_category_id, ca.channel_id, ca.channel_name
+        ) cb ON cb.camp_id = gm.camp_id
+            AND cb.room_category_id = rc.room_category_id
+        WHERE gm.camp_id = #{campId}
+          AND dp.status = 1
+        <if test="keyword != null and keyword != ''">
+            AND (
+                gm.name LIKE CONCAT('%', #{keyword}, '%')
+                OR rc.name LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="roomCategoryId != null">
+            AND rc.room_category_id = #{roomCategoryId}
+        </if>
+        <if test="channelId != null">
+            AND cb.channel_id = #{channelId}
+        </if>
+    </sql>
+
+    <select id="countPage" resultType="long">
+        SELECT COUNT(1)
+        <include refid="productRowFrom"/>
+    </select>
+
+    <select id="selectPage" resultType="com.jeez.zp.platform.vo.RoomCategoryProductPageItemVO">
+        SELECT
+            CONCAT(dp.distribution_product_id, '-', rc.room_category_id, '-', cb.channel_id) AS productId,
+            CONCAT(dp.distribution_product_id, '-', rc.room_category_id, '-', cb.channel_id) AS id,
+            gm.name AS title,
+            gm.name AS productName,
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName,
+            CAST(cb.channel_id AS CHAR) AS channelId,
+            cb.channel_name AS channelName,
+            COALESCE(gm.stock, 0) AS stock,
+            gm.selling_price_cent AS salePrice,
+            GREATEST(COALESCE(gm.original_price_cent, gm.selling_price_cent) - gm.selling_price_cent, 0) AS extraPrice,
+            DATE_FORMAT(gm.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+            DATE_FORMAT(gm.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt,
+            gm.status AS status,
+            gm.reservation_phone AS reservationPhone,
+            gm.reservation_note AS reservationNote
+        <include refid="productRowFrom"/>
+        ORDER BY dp.distribution_product_id ASC, rc.room_category_id ASC, cb.sort_account_id ASC, cb.channel_id ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+</mapper>

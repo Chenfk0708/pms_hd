@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.order.mapper.OrderReportMapper">
+
+    <select id="selectOrderReportRows" resultType="com.jeez.zp.order.vo.OrderReportRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            om.status AS status,
+            om.payment_status AS paymentStatus,
+            om.created_at AS createdAt,
+            om.start_at AS startAt,
+            om.end_at AS endAt
+        FROM order_main om
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+        ORDER BY om.created_at DESC, om.order_id DESC
+    </select>
+</mapper>

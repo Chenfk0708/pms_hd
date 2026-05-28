@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.RoomStatusOperationLogMapper">
+
+    <select id="selectRows" resultType="com.jeez.zp.platform.vo.RoomStatusOperationLogQueryRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS roomStatusOperationLogId,
+            rc.name AS roomCategoryName,
+            r.room_name AS roomName,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.source_type AS sourceType,
+            om.status AS orderStatus,
+            om.payment_status AS paymentStatus,
+            CAST(ca.channel_id AS CHAR) AS channelId,
+            ca.channel_name AS channelName,
+            COALESCE(gm.name, rc.name) AS channelRoomCategoryProductName,
+            COALESCE(pu.nick_name, CAST(om.created_by AS CHAR)) AS userName,
+            om.created_at AS createTime,
+            om.remark AS remark
+        FROM order_main om
+        JOIN room_category rc ON rc.room_category_id = om.room_category_id
+            AND rc.camp_id = om.camp_id
+            AND rc.is_deleted = 0
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = om.camp_id
+            AND r.is_deleted = 0
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN goods_main gm ON gm.goods_id = om.goods_id
+            AND gm.camp_id = om.camp_id
+            AND gm.is_deleted = 0
+        LEFT JOIN pms_user pu ON pu.user_id = om.created_by
+            AND pu.is_deleted = 0
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.room_id IS NOT NULL
+        ORDER BY om.created_at DESC, om.order_id DESC
+    </select>
+</mapper>

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.RoomSituationReportMapper">
+
+    <select id="selectInventoryRows" resultType="com.jeez.zp.platform.vo.RoomSituationInventoryRowVO">
+        SELECT
+            CAST(r.room_id AS CHAR) AS roomId,
+            r.room_name AS roomName,
+            CAST(r.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName,
+            rc.sort_no AS roomCategorySeq,
+            r.sort_no AS roomSeq,
+            r.lock_status AS lockStatus,
+            r.clean_status AS cleanStatus
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+        <if test="poiIds != null and poiIds.size() &gt; 0">
+            AND r.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC, r.sort_no ASC, r.room_id ASC
+    </select>
+
+    <select id="selectOrderRows" resultType="com.jeez.zp.platform.vo.RoomSituationOrderRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            CAST(om.room_id AS CHAR) AS roomId,
+            CAST(om.room_category_id AS CHAR) AS roomCategoryId,
+            om.status AS orderStatus,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.created_at AS createdAt
+        FROM order_main om
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.room_id IS NOT NULL
+          AND om.status IN ('booked', 'checked_in', 'pending', 'refunding')
+          AND om.start_at &lt; #{rangeEndExclusive}
+          AND om.end_at &gt; #{rangeStart}
+        <if test="poiIds != null and poiIds.size() &gt; 0">
+            AND om.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        ORDER BY om.room_category_id ASC, om.room_id ASC, om.start_at ASC, om.order_id ASC
+    </select>
+</mapper>

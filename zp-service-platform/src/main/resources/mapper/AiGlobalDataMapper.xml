@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.AiGlobalDataMapper">
+
+    <select id="selectStrongReminderRows" resultType="com.jeez.zp.platform.vo.AiGlobalStrongReminderRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            om.camp_id AS campId,
+            om.out_order_no AS outOrderNo,
+            om.order_no AS orderNo,
+            om.guest_name AS guestName,
+            r.room_name AS roomName,
+            rc.name AS roomCategoryName,
+            ca.channel_id AS channelId,
+            ca.channel_name AS channelName,
+            om.status AS orderStatus,
+            om.start_at AS startAt,
+            om.created_at AS createdAt
+        FROM order_main om
+        LEFT JOIN room r ON r.room_id = om.room_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.order_type = 'daily_room'
+          AND om.status IN ('pending', 'booked', 'refunding')
+        ORDER BY
+            CASE
+                WHEN om.status = 'pending' THEN 1
+                WHEN om.status = 'booked' THEN 2
+                WHEN om.status = 'refunding' THEN 3
+                ELSE 9
+            END ASC,
+            om.created_at DESC,
+            om.order_id DESC
+    </select>
+</mapper>

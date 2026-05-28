@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.room.mapper.CleanTaskMapper">
+
+    <select id="selectTaskRows" resultType="com.jeez.zp.room.vo.CleanTaskQueryRowVO">
+        SELECT
+            CAST(ct.clean_task_id AS CHAR) AS taskId,
+            p.poi_name AS poiName,
+            rc.name AS roomCategoryName,
+            r.room_name AS roomName,
+            CAST(ct.clean_staff_id AS CHAR) AS cleanerId,
+            cs.name AS cleanerName,
+            ct.task_type AS taskType,
+            ct.task_status AS taskStatus,
+            COALESCE(ct.remark, '') AS remark,
+            ct.deadline_at AS deadlineAt
+        FROM clean_task ct
+        JOIN pms_poi p ON p.poi_id = ct.poi_id
+            AND p.camp_id = ct.camp_id
+            AND p.status = 1
+            AND p.is_deleted = 0
+        JOIN room r ON r.room_id = ct.room_id
+            AND r.camp_id = ct.camp_id
+            AND r.status = 1
+            AND r.is_deleted = 0
+        JOIN room_category rc ON rc.room_category_id = ct.room_category_id
+            AND rc.camp_id = ct.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        LEFT JOIN clean_staff cs ON cs.clean_staff_id = ct.clean_staff_id
+            AND cs.camp_id = ct.camp_id
+            AND cs.is_deleted = 0
+        WHERE ct.camp_id = #{campId}
+        <if test="poiId != null">
+            AND ct.poi_id = #{poiId}
+        </if>
+        <if test="roomId != null">
+            AND ct.room_id = #{roomId}
+        </if>
+        <if test="cleanerIds != null and cleanerIds.size() > 0">
+            AND ct.clean_staff_id IN
+            <foreach collection="cleanerIds" item="cleanerId" open="(" separator="," close=")">
+                #{cleanerId}
+            </foreach>
+        </if>
+        <if test="cleanDate != null">
+            AND DATE(ct.deadline_at) = #{cleanDate}
+        </if>
+        ORDER BY ct.deadline_at DESC, ct.clean_task_id DESC
+    </select>
+
+    <select id="selectStores" resultType="com.jeez.zp.room.vo.CleanTaskOptionVO">
+        SELECT
+            CAST(p.poi_id AS CHAR) AS id,
+            p.poi_name AS label
+        FROM pms_poi p
+        WHERE p.camp_id = #{campId}
+          AND p.status = 1
+          AND p.is_deleted = 0
+        ORDER BY p.sort_no ASC, p.poi_id ASC
+    </select>
+
+    <select id="selectRooms" resultType="com.jeez.zp.room.vo.CleanTaskOptionVO">
+        SELECT
+            CAST(r.room_id AS CHAR) AS id,
+            CONCAT(rc.name, ' / ', r.room_name) AS label
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC, r.sort_no ASC, r.room_id ASC
+    </select>
+
+    <select id="selectCleaners" resultType="com.jeez.zp.room.vo.CleanTaskOptionVO">
+        SELECT
+            CAST(cs.clean_staff_id AS CHAR) AS id,
+            cs.name AS label
+        FROM clean_staff cs
+        WHERE cs.camp_id = #{campId}
+          AND cs.is_deleted = 0
+          AND cs.status = 1
+        ORDER BY cs.clean_staff_id ASC
+    </select>
+</mapper>

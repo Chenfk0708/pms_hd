@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.PlatformBootstrapMapper">
+
+    <select id="selectAvailableCamps" resultType="com.jeez.zp.platform.vo.CampSummaryVO">
+        SELECT
+            c.camp_id AS campId,
+            c.name AS name,
+            p.poi_id AS poiId,
+            p.poi_name AS poiName
+        FROM pms_camp c
+        LEFT JOIN (
+            SELECT camp_id, poi_id, poi_name
+            FROM (
+                SELECT
+                    poi.camp_id,
+                    poi.poi_id,
+                    poi.poi_name,
+                    ROW_NUMBER() OVER (PARTITION BY poi.camp_id ORDER BY poi.sort_no ASC, poi.poi_id ASC) AS row_num
+                FROM pms_poi poi
+                WHERE poi.is_deleted = 0
+                  AND poi.status = 1
+            ) ranked_poi
+            WHERE ranked_poi.row_num = 1
+        ) p ON p.camp_id = c.camp_id
+        WHERE c.is_deleted = 0
+          AND c.status = 1
+        ORDER BY c.camp_id ASC
+    </select>
+
+    <select id="selectCurrentUserBundle" resultType="com.jeez.zp.platform.vo.CurrentUserBundleVO">
+        SELECT
+            u.user_id AS userId,
+            u.mobile AS mobile,
+            u.email AS email,
+            u.nick_name AS nickName,
+            m.member_id AS memberId,
+            m.name AS memberName,
+            m.camp_id AS campId,
+            m.role_id AS roleId,
+            r.role_code AS roleCode,
+            r.role_name AS roleName,
+            c.name AS campName,
+            p.poi_id AS poiId,
+            p.poi_name AS poiName
+        FROM pms_user u
+        JOIN pms_member m ON m.user_id = u.user_id AND m.is_deleted = 0
+        JOIN pms_role r ON r.role_id = m.role_id AND r.is_deleted = 0
+        LEFT JOIN pms_camp c ON c.camp_id = m.camp_id AND c.is_deleted = 0
+        LEFT JOIN (
+            SELECT camp_id, poi_id, poi_name
+            FROM (
+                SELECT
+                    poi.camp_id,
+                    poi.poi_id,
+                    poi.poi_name,
+                    ROW_NUMBER() OVER (PARTITION BY poi.camp_id ORDER BY poi.sort_no ASC, poi.poi_id ASC) AS row_num
+                FROM pms_poi poi
+                WHERE poi.is_deleted = 0
+                  AND poi.status = 1
+            ) ranked_poi
+            WHERE ranked_poi.row_num = 1
+        ) p ON p.camp_id = m.camp_id
+        WHERE u.user_id = #{userId}
+          AND u.is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectUserByMobileOrEmail" resultType="com.jeez.zp.platform.vo.CurrentUserBundleVO">
+        SELECT
+            u.user_id AS userId,
+            u.mobile AS mobile,
+            u.email AS email,
+            u.nick_name AS nickName,
+            m.member_id AS memberId,
+            m.name AS memberName,
+            m.camp_id AS campId,
+            m.role_id AS roleId,
+            r.role_code AS roleCode,
+            r.role_name AS roleName,
+            c.name AS campName,
+            p.poi_id AS poiId,
+            p.poi_name AS poiName
+        FROM pms_user u
+        JOIN pms_member m ON m.user_id = u.user_id
+            AND m.is_deleted = 0
+            AND m.status = 1
+        JOIN pms_role r ON r.role_id = m.role_id
+            AND r.is_deleted = 0
+            AND r.status = 1
+        LEFT JOIN pms_camp c ON c.camp_id = m.camp_id AND c.is_deleted = 0
+        LEFT JOIN (
+            SELECT camp_id, poi_id, poi_name
+            FROM (
+                SELECT
+                    poi.camp_id,
+                    poi.poi_id,
+                    poi.poi_name,
+                    ROW_NUMBER() OVER (PARTITION BY poi.camp_id ORDER BY poi.sort_no ASC, poi.poi_id ASC) AS row_num
+                FROM pms_poi poi
+                WHERE poi.is_deleted = 0
+                  AND poi.status = 1
+            ) ranked_poi
+            WHERE ranked_poi.row_num = 1
+        ) p ON p.camp_id = m.camp_id
+        WHERE u.is_deleted = 0
+          AND u.status = 1
+          AND (
+              <if test="mobile != null and mobile != ''">
+                  u.mobile = #{mobile}
+              </if>
+              <if test="mobile != null and mobile != '' and email != null and email != ''">
+                  OR
+              </if>
+              <if test="email != null and email != ''">
+                  u.email = #{email}
+              </if>
+          )
+        LIMIT 1
+    </select>
+
+    <select id="selectAuthorityCodesByRoleId" resultType="java.lang.String">
+        SELECT ad.authority_code
+        FROM pms_role_authority pra
+        JOIN authority_dict ad ON ad.authority_id = pra.authority_id
+        WHERE pra.role_id = #{roleId}
+          AND ad.status = 1
+        ORDER BY ad.seq_no ASC, ad.authority_id ASC
+    </select>
+
+    <select id="selectCampDetail" resultType="com.jeez.zp.platform.vo.CampDetailVO">
+        SELECT
+            c.camp_id AS campId,
+            c.name AS name,
+            c.city_name AS cityName,
+            c.address AS address,
+            c.contact_number AS contactNumber,
+            p.poi_id AS poiId,
+            p.poi_name AS poiName
+        FROM pms_camp c
+        LEFT JOIN (
+            SELECT camp_id, poi_id, poi_name
+            FROM (
+                SELECT
+                    poi.camp_id,
+                    poi.poi_id,
+                    poi.poi_name,
+                    ROW_NUMBER() OVER (PARTITION BY poi.camp_id ORDER BY poi.sort_no ASC, poi.poi_id ASC) AS row_num
+                FROM pms_poi poi
+                WHERE poi.is_deleted = 0
+                  AND poi.status = 1
+            ) ranked_poi
+            WHERE ranked_poi.row_num = 1
+        ) p ON p.camp_id = c.camp_id
+        WHERE c.camp_id = #{campId}
+          AND c.is_deleted = 0
+          AND c.status = 1
+        LIMIT 1
+    </select>
+
+    <select id="selectSystemConfigs" resultType="com.jeez.zp.platform.vo.SystemConfigItemVO">
+        SELECT
+            cfg.configKey,
+            cfg.configValue,
+            cfg.configScope,
+            cfg.source
+        FROM (
+            SELECT
+                sc.config_key AS configKey,
+                CAST(sc.config_value AS CHAR) AS configValue,
+                sc.config_scope AS configScope,
+                COALESCE(sc.source, 'system') AS source,
+                sc.system_config_id AS sortOrder
+            FROM system_config sc
+            WHERE sc.camp_id = #{campId}
+
+            UNION ALL
+
+            SELECT
+                usc.config_key AS configKey,
+                CAST(usc.config_value AS CHAR) AS configValue,
+                'user' AS configScope,
+                'user' AS source,
+                1000000000 + usc.user_system_config_id AS sortOrder
+            FROM user_system_config usc
+            WHERE usc.camp_id = #{campId}
+              AND usc.user_id = #{userId}
+        ) cfg
+        ORDER BY cfg.sortOrder ASC
+    </select>
+
+    <select id="selectChannelsByCampId" resultType="com.jeez.zp.platform.vo.ChannelVO">
+        SELECT
+            ca.channel_id AS channelId,
+            ca.channel_name AS channelName,
+            ca.account_id AS accountId,
+            ca.account_name AS accountName,
+            pr.poi_id AS poiId,
+            pr.sync_status AS syncStatus,
+            ca.status AS status
+        FROM channel_account ca
+        LEFT JOIN channel_poi_rel pr ON pr.account_id = ca.account_id
+            AND pr.camp_id = ca.camp_id
+        WHERE ca.camp_id = #{campId}
+        ORDER BY ca.account_id ASC, pr.poi_id ASC
+    </select>
+</mapper>

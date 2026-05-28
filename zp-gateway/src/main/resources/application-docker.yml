@@ -1,0 +1,17 @@
+# Docker 环境配置（仅覆盖环境差异项）
+spring:
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:redis}
+      port: ${SPRING_REDIS_PORT:6379}
+      password: ${SPRING_REDIS_PASSWORD:}
+
+jeez:
+  gateway:
+    services:
+      minio: http://jeez-minio:9000
+      platform: ${JEEZ_GATEWAY_PLATFORM_URL:http://platform:8090}
+      zp-order: ${JEEZ_GATEWAY_ZP_ORDER_URL:http://zp-order:8094}
+      zp-inventory: ${JEEZ_GATEWAY_ZP_INVENTORY_URL:http://zp-inventory:8092}
+      zp-cleaning: ${JEEZ_GATEWAY_ZP_CLEANING_URL:http://zp-cleaning:8095}
+      zp-channel: ${JEEZ_GATEWAY_ZP_CHANNEL_URL:http://zp-channel:8097}

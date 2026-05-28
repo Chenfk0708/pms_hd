@@ -1,0 +1,11 @@
+# Coach 服务 Dockerfile - 使用本地构建的 jar
+FROM eclipse-temurin:17-jre
+
+WORKDIR /app
+
+# 直接复制本地构建的 jar 文件
+COPY ../jeez-coach-fitness/target/*-exec.jar app.jar
+
+EXPOSE 8085
+
+ENTRYPOINT ["java", "-jar", "-Dspring.profiles.active=docker", "app.jar"]

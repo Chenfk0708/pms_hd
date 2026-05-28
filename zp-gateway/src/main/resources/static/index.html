@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Jeez Fitness gateway control surface and microservice health dashboard.">
+    <title>Jeez Gateway Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+<div id="app" class="page-shell">
+    <header class="top-nav">
+        <div class="container nav-row">
+            <a class="brand" href="#top" aria-label="Jeez Gateway home">
+                <span class="brand-mark"><i class="bi bi-grid-1x2-fill"></i></span>
+                <span class="brand-text">Jeez Gateway Console</span>
+            </a>
+            <nav class="nav-links" aria-label="Primary navigation">
+                <a href="#services">Services</a>
+                <a href="#infrastructure">Infrastructure</a>
+                <a href="#stack">Stack</a>
+                <a href="/swagger-gateway.html" target="_blank" rel="noopener">API Docs</a>
+            </nav>
+        </div>
+    </header>
+
+    <main id="top">
+        <section class="hero">
+            <div class="container hero-grid">
+                <div class="hero-copy">
+                    <p class="eyebrow">Unified Operations Surface</p>
+                    <h1>Control Every Fitness Service From One Gateway</h1>
+                    <p class="hero-sub">
+                        Live status for all core services, fast access to Swagger,
+                        and direct links to infrastructure consoles.
+                    </p>
+                    <div class="hero-actions">
+                        <a href="#services" class="btn btn-main">
+                            <i class="bi bi-diagram-3"></i>
+                            Browse Services
+                        </a>
+                        <a href="/swagger-gateway.html" class="btn btn-ghost" target="_blank" rel="noopener">
+                            <i class="bi bi-journal-code"></i>
+                            Open API Docs
+                        </a>
+                    </div>
+                    <div class="domain-strip" role="list" aria-label="External consoles">
+                        <a class="domain-pill" role="listitem" href="https://minio.fitness.dualseason.com" target="_blank" rel="noopener">
+                            <i class="bi bi-cloud-upload-fill"></i>
+                            minio.fitness.dualseason.com
+                        </a>
+                        <a class="domain-pill" role="listitem" href="https://nacos.fitness.dualseason.com" target="_blank" rel="noopener">
+                            <i class="bi bi-hdd-network-fill"></i>
+                            nacos.fitness.dualseason.com
+                        </a>
+                    </div>
+                </div>
+
+                <aside class="hero-panel" aria-live="polite">
+                    <div class="panel-head">
+                        <h2>Runtime Snapshot</h2>
+                        <button class="btn btn-refresh" @click="refreshStatus" aria-label="Refresh service status">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            Refresh
+                        </button>
+                    </div>
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <p class="kpi-label">Services</p>
+                            <p class="kpi-value">{{ totalServices }}</p>
+                        </div>
+                        <div class="kpi-card kpi-running">
+                            <p class="kpi-label">Running</p>
+                            <p class="kpi-value">{{ runningServices }}</p>
+                        </div>
+                    </div>
+                    <p class="panel-meta">
+                        Last update: <strong>{{ lastUpdateTime }}</strong>
+                    </p>
+                </aside>
+            </div>
+        </section>
+
+        <section id="services" class="section-block">
+            <div class="container">
+                <div class="section-head">
+                    <h2>Microservices</h2>
+                    <p>Health, routing path, and documentation access in one grid.</p>
+                </div>
+                <div class="service-grid">
+                    <article class="service-card" v-for="service in services" :key="service.name">
+                        <header class="service-head" :class="service.headerClass">
+                            <div class="service-title">
+                                <i :class="service.icon"></i>
+                                <span>{{ service.name }}</span>
+                            </div>
+                            <span class="status-pill badge" :class="service.statusBadge">
+                                <i :class="service.statusIcon"></i>
+                                {{ service.statusLabel }}
+                            </span>
+                        </header>
+                        <div class="service-body">
+                            <p class="service-desc">{{ service.description }}</p>
+                            <div class="service-meta">
+                                <span><i class="bi bi-hdd-network"></i> {{ service.port }}</span>
+                                <span><i class="bi bi-signpost-2"></i> {{ service.path }}</span>
+                            </div>
+                        </div>
+                        <footer class="service-actions">
+                            <a :href="service.swaggerUrl" target="_blank" rel="noopener" class="btn btn-outline-main">
+                                <i class="bi bi-journal-richtext"></i> Swagger
+                            </a>
+                            <a :href="service.healthUrl" target="_blank" rel="noopener" class="btn btn-outline-sub">
+                                <i class="bi bi-heart-pulse"></i> Health
+                            </a>
+                        </footer>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section id="infrastructure" class="section-block section-muted">
+            <div class="container">
+                <div class="section-head">
+                    <h2>Infrastructure</h2>
+                    <p>Storage, configuration center, queue and gateway operations.</p>
+                </div>
+                <div class="infra-grid">
+                    <article class="infra-card" v-for="infra in infrastructures" :key="infra.name">
+                        <i :class="infra.icon" class="infra-icon" :style="{ color: infra.color }"></i>
+                        <h3>{{ infra.name }}</h3>
+                        <p>{{ infra.description }}</p>
+                        <p class="infra-port">{{ infra.port }}</p>
+                        <a v-if="infra.url" :href="infra.url" target="_blank" rel="noopener" class="btn btn-outline-main infra-link">
+                            Open Console
+                        </a>
+                        <span v-else class="infra-none">No public console</span>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section id="stack" class="section-block">
+            <div class="container">
+                <div class="section-head">
+                    <h2>Technology Stack</h2>
+                    <p>Core frameworks and middleware currently powering the platform.</p>
+                </div>
+                <div class="stack-grid">
+                    <div class="stack-chip" v-for="tech in techStack" :key="tech.name">
+                        <i :class="tech.icon" :style="{ color: tech.color }"></i>
+                        <div>
+                            <strong>{{ tech.name }}</strong>
+                            <small>{{ tech.version }}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-row">
+            <span>Jeez Fitness Platform Gateway</span>
+            <span>Build Time: {{ buildTime }}</span>
+        </div>
+    </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@3.3.0/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios@1.5.0/dist/axios.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/index.js"></script>
+</body>
+</html>

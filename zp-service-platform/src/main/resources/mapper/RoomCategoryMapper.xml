@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.RoomCategoryMapper">
+
+    <sql id="roomCategoryFilters">
+        WHERE rc.camp_id = #{campId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        <if test="poiId != null">
+            AND rc.poi_id = #{poiId}
+        </if>
+        <if test="roomCategoryGroupId != null">
+            AND rc.group_id = #{roomCategoryGroupId}
+        </if>
+        <if test="roomCategoryName != null and roomCategoryName != ''">
+            AND rc.name LIKE CONCAT('%', #{roomCategoryName}, '%')
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                rc.name LIKE CONCAT('%', #{keyword}, '%')
+                OR rc.display_name LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="channelId != null">
+            AND EXISTS (
+                SELECT 1
+                FROM channel_room_category_rel rel
+                JOIN channel_account ca ON ca.account_id = rel.account_id
+                    AND ca.camp_id = rel.camp_id
+                WHERE rel.camp_id = rc.camp_id
+                  AND rel.room_category_id = rc.room_category_id
+                  AND ca.channel_id = #{channelId}
+            )
+        </if>
+    </sql>
+
+    <select id="countPage" resultType="long">
+        SELECT COUNT(1)
+        FROM room_category rc
+        <include refid="roomCategoryFilters"/>
+    </select>
+
+    <select id="selectPage" resultType="com.jeez.zp.platform.vo.RoomCategoryPageItemVO">
+        SELECT
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            CAST(rc.room_category_id AS CHAR) AS id,
+            CAST(rc.camp_id AS CHAR) AS campId,
+            CAST(rc.poi_id AS CHAR) AS poiId,
+            p.poi_name AS poiName,
+            CAST(rc.group_id AS CHAR) AS roomCategoryGroupId,
+            g.group_name AS roomCategoryGroupName,
+            rc.name AS roomCategoryName,
+            COALESCE(rc.display_name, rc.name) AS name,
+            COALESCE(rc.room_count, 0) AS roomNum,
+            (
+                SELECT GROUP_CONCAT(r.room_name ORDER BY r.sort_no ASC, r.room_id ASC SEPARATOR ',')
+                FROM room r
+                WHERE r.room_category_id = rc.room_category_id
+                  AND r.status = 1
+                  AND r.is_deleted = 0
+            ) AS roomNames,
+            COALESCE(rc.room_count, 0) AS inventory,
+            rc.guest_count AS checkinGuestCount,
+            rc.weekday_price_cent AS basePrice,
+            rc.weekend_price_cent AS weekendPrice,
+            rc.holiday_price_cent AS holidayPrice,
+            rc.earliest_check_in_hour AS earliestCheckInTime,
+            rc.latest_check_in_hour AS latestCheckInTime,
+            rc.latest_check_out_hour AS latestCheckOutTime,
+            rc.display_name AS displayName,
+            rc.highlight_description AS highlightDescription,
+            rc.nearby_description AS nearbyDescription,
+            rc.article_description AS articleDescription,
+            (
+                SELECT CAST(m.media_resource_id AS CHAR)
+                FROM room_category_media m
+                WHERE m.room_category_id = rc.room_category_id
+                  AND m.status = 1
+                ORDER BY CASE WHEN m.scene_type = 'cover' THEN 0 ELSE 1 END, m.sort_no ASC, m.media_id ASC
+                LIMIT 1
+            ) AS mainPhotoMediaId,
+            (
+                SELECT COALESCE(m.media_url, mr.url)
+                FROM room_category_media m
+                LEFT JOIN media_resource mr ON mr.media_resource_id = m.media_resource_id
+                    AND mr.is_deleted = 0
+                WHERE m.room_category_id = rc.room_category_id
+                  AND m.status = 1
+                ORDER BY CASE WHEN m.scene_type = 'cover' THEN 0 ELSE 1 END, m.sort_no ASC, m.media_id ASC
+                LIMIT 1
+            ) AS mainPhotoMediaUrl,
+            (
+                SELECT COALESCE(m.media_url, mr.url)
+                FROM room_category_media m
+                LEFT JOIN media_resource mr ON mr.media_resource_id = m.media_resource_id
+                    AND mr.is_deleted = 0
+                WHERE m.room_category_id = rc.room_category_id
+                  AND m.status = 1
+                ORDER BY CASE WHEN m.scene_type = 'cover' THEN 0 ELSE 1 END, m.sort_no ASC, m.media_id ASC
+                LIMIT 1
+            ) AS mainPhoto,
+            p.address AS fullAddress
+        FROM room_category rc
+        LEFT JOIN pms_poi p ON p.poi_id = rc.poi_id
+            AND p.is_deleted = 0
+            AND p.status = 1
+        LEFT JOIN room_category_group g ON g.group_id = rc.group_id
+            AND g.is_deleted = 0
+            AND g.status = 1
+        <include refid="roomCategoryFilters"/>
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="selectRoomViews" resultType="com.jeez.zp.platform.vo.RoomCategoryRoomViewVO">
+        SELECT
+            CAST(r.room_category_id AS CHAR) AS roomCategoryId,
+            CAST(r.room_id AS CHAR) AS roomId,
+            r.room_name AS roomName,
+            NULL AS yuejumaAddress
+        FROM room r
+        WHERE r.status = 1
+          AND r.is_deleted = 0
+          AND r.room_category_id IN
+          <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+              #{roomCategoryId}
+          </foreach>
+        ORDER BY r.room_category_id ASC, r.sort_no ASC, r.room_id ASC
+    </select>
+
+    <select id="selectDetail" resultType="com.jeez.zp.platform.vo.RoomCategoryDetailRowVO">
+        SELECT
+            rc.name AS roomName,
+            COALESCE((
+                SELECT COUNT(1)
+                FROM room r
+                WHERE r.camp_id = rc.camp_id
+                  AND r.room_category_id = rc.room_category_id
+                  AND r.status = 1
+                  AND r.is_deleted = 0
+            ), COALESCE(rc.room_count, 0)) AS inventory,
+            (
+                SELECT COUNT(1)
+                FROM order_main om
+                WHERE om.camp_id = rc.camp_id
+                  AND om.room_category_id = rc.room_category_id
+                  AND om.is_deleted = 0
+                  AND om.order_type = 'daily_room'
+                  AND om.status = 'checked_in'
+            ) AS staying,
+            (
+                SELECT COUNT(1)
+                FROM order_main om
+                WHERE om.camp_id = rc.camp_id
+                  AND om.room_category_id = rc.room_category_id
+                  AND om.is_deleted = 0
+                  AND om.order_type = 'daily_room'
+                  AND om.status IN ('booked', 'pending', 'refunding')
+            ) AS pendingOrders
+        FROM room_category rc
+        WHERE rc.camp_id = #{campId}
+          AND rc.room_category_id = #{roomCategoryId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectDetailChannelPriceRows" resultType="com.jeez.zp.platform.vo.RoomCategoryDetailChannelPriceRowVO">
+        SELECT
+            COALESCE(NULLIF(ca.channel_name, ''), CONCAT('渠道', ca.channel_id)) AS label,
+            rc.weekday_price_cent AS basePrice,
+            rc.weekend_price_cent AS weekendPrice,
+            rel.shelf_status AS shelfStatus,
+            rel.audit_status AS auditStatus
+        FROM channel_room_category_rel rel
+        JOIN channel_account ca ON ca.account_id = rel.account_id
+            AND ca.camp_id = rel.camp_id
+        JOIN room_category rc ON rc.room_category_id = rel.room_category_id
+            AND rc.camp_id = rel.camp_id
+        WHERE rel.camp_id = #{campId}
+          AND rel.room_category_id = #{roomCategoryId}
+        ORDER BY ca.account_id ASC
+    </select>
+</mapper>

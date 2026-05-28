@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.room.mapper.CleanSettingMapper">
+
+    <select id="selectStores" resultType="com.jeez.zp.room.vo.CleanSettingOptionVO">
+        SELECT
+            CAST(p.poi_id AS CHAR) AS value,
+            p.poi_name AS label
+        FROM pms_poi p
+        WHERE p.camp_id = #{campId}
+          AND p.status = 1
+          AND p.is_deleted = 0
+        ORDER BY p.sort_no ASC, p.poi_id ASC
+    </select>
+
+    <select id="selectSettings" resultType="com.jeez.zp.room.vo.CleanSettingRowVO">
+        SELECT
+            cs.config_key AS configKey,
+            CAST(cs.config_value AS CHAR) AS configValue,
+            cs.updated_at AS updatedAt
+        FROM clean_setting cs
+        WHERE cs.camp_id = #{campId}
+        ORDER BY cs.config_key ASC
+    </select>
+
+    <select id="countActiveTasks" resultType="long">
+        SELECT COUNT(1)
+        FROM clean_task ct
+        WHERE ct.camp_id = #{campId}
+          AND ct.task_status IN ('pending', 'processing')
+        <if test="poiId != null">
+          AND ct.poi_id = #{poiId}
+        </if>
+        <if test="businessDate != null">
+          AND DATE(ct.deadline_at) = #{businessDate}
+        </if>
+    </select>
+
+    <select id="countPendingTasks" resultType="long">
+        SELECT COUNT(1)
+        FROM clean_task ct
+        WHERE ct.camp_id = #{campId}
+          AND ct.task_status = 'pending'
+        <if test="poiId != null">
+          AND ct.poi_id = #{poiId}
+        </if>
+        <if test="businessDate != null">
+          AND DATE(ct.deadline_at) = #{businessDate}
+        </if>
+    </select>
+
+    <select id="countActiveTasksByHourRange" resultType="long">
+        SELECT COUNT(1)
+        FROM clean_task ct
+        WHERE ct.camp_id = #{campId}
+          AND ct.task_status IN ('pending', 'processing')
+          AND ct.deadline_at IS NOT NULL
+          AND HOUR(ct.deadline_at) &gt;= #{startHour}
+          AND HOUR(ct.deadline_at) &lt; #{endHour}
+        <if test="poiId != null">
+          AND ct.poi_id = #{poiId}
+        </if>
+        <if test="businessDate != null">
+          AND DATE(ct.deadline_at) = #{businessDate}
+        </if>
+    </select>
+</mapper>

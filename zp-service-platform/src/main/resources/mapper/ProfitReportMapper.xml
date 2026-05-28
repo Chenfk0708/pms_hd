@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.ProfitReportMapper">
+
+    <select id="selectOrderRows" resultType="com.jeez.zp.platform.vo.ProfitReportOrderRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            om.status AS orderStatus,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.day_num AS dayNum,
+            CASE
+                WHEN om.settlement_amount_cent > 0 THEN om.settlement_amount_cent
+                WHEN om.total_pay_price_cent > 0 THEN GREATEST(
+                    om.total_pay_price_cent - COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                    0
+                )
+                ELSE GREATEST(
+                    om.total_price_cent - COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                    0
+                )
+            END AS businessIncomeCent
+        FROM order_main om
+        LEFT JOIN distribution_order do ON do.source_order_id = om.order_id
+            AND do.camp_id = om.camp_id
+            AND (do.channel_id = om.channel_id OR do.channel_id IS NULL)
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+            AND rc.camp_id = om.camp_id
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.order_type = 'daily_room'
+          AND om.status NOT IN ('cancelled', 'refunded', 'pending')
+          AND om.start_at &lt; #{rangeEndExclusive}
+          AND om.end_at &gt; #{rangeStart}
+        <if test="poiId != null">
+            AND om.poi_id = #{poiId}
+        </if>
+        <if test="roomCategoryId != null">
+            AND om.room_category_id = #{roomCategoryId}
+        </if>
+        <if test="roomCategoryGroupId != null">
+            AND rc.group_id = #{roomCategoryGroupId}
+        </if>
+        <if test="channelId != null">
+            AND ca.channel_id = #{channelId}
+        </if>
+        <if test="roomId != null">
+            AND om.room_id = #{roomId}
+        </if>
+        ORDER BY om.start_at ASC, om.order_id ASC
+    </select>
+
+    <select id="selectCleanTaskRows" resultType="com.jeez.zp.platform.vo.ProfitReportCleanTaskRowVO">
+        SELECT
+            CAST(ct.clean_task_id AS CHAR) AS taskId,
+            ct.task_type AS taskType,
+            ct.task_status AS taskStatus,
+            ct.deadline_at AS deadlineAt
+        FROM clean_task ct
+        LEFT JOIN room_category rc ON rc.room_category_id = ct.room_category_id
+            AND rc.camp_id = ct.camp_id
+        WHERE ct.camp_id = #{campId}
+          AND ct.deadline_at &gt;= #{rangeStart}
+          AND ct.deadline_at &lt; #{rangeEndExclusive}
+        <if test="poiId != null">
+            AND ct.poi_id = #{poiId}
+        </if>
+        <if test="roomCategoryId != null">
+            AND ct.room_category_id = #{roomCategoryId}
+        </if>
+        <if test="roomCategoryGroupId != null">
+            AND rc.group_id = #{roomCategoryGroupId}
+        </if>
+        <if test="roomId != null">
+            AND ct.room_id = #{roomId}
+        </if>
+        ORDER BY ct.deadline_at ASC, ct.clean_task_id ASC
+    </select>
+</mapper>

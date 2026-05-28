@@ -1,0 +1,113 @@
+# =============================
+# Build outputs (Java/Maven)
+# =============================
+target/
+out/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+
+# Maven release/plugin backups
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+dependency-reduced-pom.xml
+release.properties
+buildNumber.properties
+.mvn/timing.properties
+
+# =============================
+# Logs & runtime data
+# =============================
+logs/
+*.log
+pids/
+nohup.out
+hs_err_pid*
+replay_pid*
+dump.rdb
+
+# =============================
+# IDE / editor files
+# =============================
+# Eclipse
+.project
+.classpath
+.settings/
+
+.idea/
+!.idea/runConfigurations/
+!.idea/runConfigurations/*.xml
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+*.swo
+
+# Local-only assistant config
+.claude/settings.local.json
+.claude/**/*.local.json
+
+# =============================
+# OS junk
+# =============================
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+__MACOSX/
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================
+# Temp files
+# =============================
+nul
+*.tmp
+*.temp
+.temp/
+
+# =============================
+# CMake
+# =============================
+cmake-build-*/
+
+# =============================
+# Project policy
+# =============================
+# Intentionally NOT ignored (so they can be committed to Git):
+# - `.env` / `docker/.env`
+# - `*.pem` / `*.p12`
+# - `docker/cert/`

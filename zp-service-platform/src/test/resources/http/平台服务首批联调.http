@@ -1,0 +1,89 @@
+### 平台服务首批联调（2026-05-27）
+@gateway = http://localhost:8080
+@platform = http://localhost:8090
+@contentType = application/json
+@token = 替换为登录返回 token
+
+### 0. 启动前提示
+# 1. Docker 的 jeez-gateway 容器会占用 8080，联调前先执行：docker stop jeez-gateway
+# 2. 本地启动命令：
+#    $env:SPRING_DATASOURCE_USERNAME='root'
+#    $env:SPRING_DATASOURCE_PASSWORD='123456'
+#    mvn -pl zp-service-platform spring-boot:run
+#    mvn -pl zp-gateway spring-boot:run
+
+### 1. 登录
+POST {{gateway}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "mobile": "13800000001",
+  "password": "demo-login"
+}
+
+### 2. 查询当前用户（将 {{token}} 替换为登录返回 token）
+GET {{gateway}}/auth/me
+Authorization: Bearer {{token}}
+
+### 3. 查询门店列表
+POST {{gateway}}/camps/get
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{}
+
+### 4. 查询门店详情
+POST {{gateway}}/camp/get
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "campId": "10001"
+}
+
+### 5. 查询渠道列表
+POST {{gateway}}/channels/get
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "campId": "10001"
+}
+
+### 6. 直连平台服务查询版本资源（验证可信头）
+POST {{platform}}/edition/resource/get
+Content-Type: {{contentType}}
+X-Auth-Verified: true
+X-User-Id: 12001
+
+{
+  "campId": "10001"
+}
+
+### 7. 参考期望
+# /auth/me -> userId=12001, roleCode=admin
+# /camps/get -> campId=10001, poiId=11001
+# /camp/get -> name=路客云演示租户
+# /channels/get -> accountId 包含 25301、25302
+
+### 8. 查询角色列表
+POST {{gateway}}/role/camp/get
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "campId": "10001",
+  "keyword": "",
+  "pageNum": 1,
+  "pageSize": 10
+}
+
+### 9. 查询角色权限详情
+POST {{gateway}}/roleAuthority/camp/get
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "campId": "10001",
+  "roleId": "13001"
+}

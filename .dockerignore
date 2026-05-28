@@ -1,0 +1,60 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.iml
+*.ipr
+*.iws
+
+# Maven
+**/target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+dependency-reduced-pom.xml
+release.properties
+buildNumber.properties
+
+# Logs
+logs/
+*.log
+
+# Docker (avoid recursive copy)
+docker/
+Dockerfile
+.dockerignore
+
+# Documentation
+*.md
+docs/
+
+# Tests
+**/src/test/
+
+# Certificates and Keys
+**/cert/apiclient_key.pem
+
+# Temp files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+nul
+
+# OS
+.DS_Store
+Thumbs.db
+[Dd]esktop.ini
+
+# Database scripts (not needed in container)
+db/
+
+# Nginx config (handled separately)
+nginx/

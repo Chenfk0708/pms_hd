@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jeez 健身房管理系统</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+
+    <style>
+        /* 内联所有样式 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        }
+
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            min-height: 400px;
+            color: white;
+        }
+
+        .service-card {
+            transition: all 0.3s ease;
+            border-radius: 10px;
+        }
+
+        .service-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2) !important;
+        }
+
+        .bg-auth { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .bg-member { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .bg-store { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+        .bg-equipment { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+        .bg-coach { background: linear-gradient(135deg, #30cfd0 0%, #330867 100%); }
+        .bg-course { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
+        .bg-manager { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); }
+        .bg-payment { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 导航栏 -->
+        <nav class="navbar navbar-expand-lg navbar-dark sticky-top shadow">
+            <div class="container-fluid">
+                <a class="navbar-brand fw-bold" href="/">
+                    <i class="bi bi-lightning-charge-fill"></i> Jeez 健身房管理系统
+                </a>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/swagger-gateway.html">
+                            <i class="bi bi-book-fill"></i> API 文档
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Hero Banner -->
+        <section class="hero-section py-5">
+            <div class="container">
+                <div class="row">
+                    <div class="col-12 text-center">
+                        <h1 class="display-4 fw-bold mb-3">
+                            <i class="bi bi-diagram-3-fill"></i>
+                            Jeez 健身房管理系统
+                        </h1>
+                        <p class="lead mb-4">
+                            <strong>上海励枝软件技术有限公司</strong><br>
+                            专注于健身领域的软件开发和快速落地，为健身房赋能<br>
+                            基于 Spring Cloud 微服务架构的企业级健身房管理系统
+                        </p>
+                        <a href="/swagger-gateway.html" class="btn btn-light btn-lg">
+                            <i class="bi bi-book"></i> 查看 API 文档
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 微服务列表 -->
+        <section class="py-5">
+            <div class="container">
+                <h2 class="text-center mb-5">
+                    <i class="bi bi-grid-3x3-gap"></i> 微服务架构
+                </h2>
+
+                <div class="row g-4">
+                    <div class="col-lg-4 col-md-6" v-for="service in services" :key="service.name">
+                        <div class="card service-card h-100 shadow-sm">
+                            <div class="card-header text-white" :class="service.headerClass">
+                                <strong>{{ service.name }}</strong> ({{ service.port }})
+                            </div>
+                            <div class="card-body">
+                                <p>{{ service.description }}</p>
+                                <a :href="service.swaggerUrl" class="btn btn-primary btn-sm w-100">
+                                    <i class="bi bi-book"></i> Swagger 文档
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 页脚 -->
+        <footer class="bg-dark text-white text-center py-4">
+            <p class="mb-0">
+                © 2024-2025 <strong>上海励枝软件技术有限公司</strong> - Jeez 健身房管理系统
+            </p>
+        </footer>
+    </div>
+
+    <!-- Vue 3 -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.0/dist/vue.global.prod.js"></script>
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    services: [
+                        { name: '认证服务', description: '身份认证与授权中心', port: '8081', swaggerUrl: '/auth/swagger-ui/index.html', headerClass: 'bg-auth' },
+                        { name: '会员服务', description: '会员信息管理', port: '8082', swaggerUrl: '/member/swagger-ui/index.html', headerClass: 'bg-member' },
+                        { name: '门店服务', description: '门店信息管理', port: '8083', swaggerUrl: '/store/swagger-ui/index.html', headerClass: 'bg-store' },
+                        { name: '设备服务', description: '健身设备管理', port: '8084', swaggerUrl: '/equipment/swagger-ui/index.html', headerClass: 'bg-equipment' },
+                        { name: '教练服务', description: '教练信息管理', port: '8085', swaggerUrl: '/coach/swagger-ui/index.html', headerClass: 'bg-coach' },
+                        { name: '课程服务', description: '课程信息管理', port: '8086', swaggerUrl: '/course/swagger-ui/index.html', headerClass: 'bg-course' },
+                        { name: '管理服务', description: '管理员账户和系统配置', port: '8087', swaggerUrl: '/manager/swagger-ui/index.html', headerClass: 'bg-manager' }
+                    ]
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

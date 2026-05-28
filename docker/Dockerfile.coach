@@ -1,0 +1,41 @@
+# Coach 服务专用 Dockerfile - 优化版本
+# 使用国内 Maven 镜像
+FROM maven:3.9.5-eclipse-temurin-17 AS builder
+
+# 设置 Maven 使用国内镜像加速
+RUN mkdir -p /root/.m2 && \
+    echo '<?xml version="1.0" encoding="UTF-8"?>' > /root/.m2/settings.xml && \
+    echo '<settings>' >> /root/.m2/settings.xml && \
+    echo '  <mirrors>' >> /root/.m2/settings.xml && \
+    echo '    <mirror>' >> /root/.m2/settings.xml && \
+    echo '      <id>aliyunmaven</id>' >> /root/.m2/settings.xml && \
+    echo '      <mirrorOf>*</mirrorOf>' >> /root/.m2/settings.xml && \
+    echo '      <name>阿里云公共仓库</name>' >> /root/.m2/settings.xml && \
+    echo '      <url>https://maven.aliyun.com/repository/public</url>' >> /root/.m2/settings.xml && \
+    echo '    </mirror>' >> /root/.m2/settings.xml && \
+    echo '  </mirrors>' >> /root/.m2/settings.xml && \
+    echo '</settings>' >> /root/.m2/settings.xml
+
+WORKDIR /app
+
+# 只复制 coach 相关的 pom 文件
+COPY pom.xml .
+COPY jeez-common/pom.xml jeez-common/
+COPY jeez-coach-fitness/pom.xml jeez-coach-fitness/
+
+# 下载 coach 服务依赖（减少下载量）
+RUN mvn dependency:go-offline -pl jeez-coach-fitness -am -B
+
+# 复制 coach 服务源代码
+COPY jeez-common/src jeez-common/src/
+COPY jeez-coach-fitness/src jeez-coach-fitness/src/
+
+# 只构建 coach 服务
+RUN mvn clean package -pl jeez-coach-fitness -am -DskipTests -B
+
+# 运行阶段
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+COPY --from=builder /app/jeez-coach-fitness/target/*-exec.jar app.jar
+EXPOSE 8085
+ENTRYPOINT ["java", "-jar", "-Dspring.profiles.active=docker", "app.jar"]

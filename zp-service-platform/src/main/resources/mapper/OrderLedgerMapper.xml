@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.OrderLedgerMapper">
+
+    <sql id="ledgerFromAndJoins">
+        FROM ledger_entry le
+        LEFT JOIN payment_type pt ON pt.payment_type_id = le.payment_type_id
+            AND pt.camp_id = le.camp_id
+            AND pt.is_deleted = 0
+        LEFT JOIN payment_way pw ON pw.payment_way_id = le.payment_way_id
+            AND pw.camp_id = le.camp_id
+            AND pw.is_deleted = 0
+        LEFT JOIN order_main om ON om.order_id = le.order_id
+            AND om.camp_id = le.camp_id
+            AND om.is_deleted = 0
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+            AND rc.camp_id = le.camp_id
+            AND rc.is_deleted = 0
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = le.camp_id
+            AND r.is_deleted = 0
+    </sql>
+
+    <sql id="ledgerFilters">
+        WHERE le.camp_id = #{campId}
+        <if test="beginTime != null">
+            AND le.occurred_at &gt;= #{beginTime}
+        </if>
+        <if test="endTimeExclusive != null">
+            AND le.occurred_at &lt; #{endTimeExclusive}
+        </if>
+        <if test="paymentTypeIds != null and paymentTypeIds.size() > 0">
+            AND le.payment_type_id IN
+            <foreach collection="paymentTypeIds" item="paymentTypeId" open="(" separator="," close=")">
+                #{paymentTypeId}
+            </foreach>
+        </if>
+        <if test="paymentWayIds != null and paymentWayIds.size() > 0">
+            AND le.payment_way_id IN
+            <foreach collection="paymentWayIds" item="paymentWayId" open="(" separator="," close=")">
+                #{paymentWayId}
+            </foreach>
+        </if>
+        <if test="roomIds != null and roomIds.size() > 0">
+            AND om.room_id IN
+            <foreach collection="roomIds" item="roomId" open="(" separator="," close=")">
+                #{roomId}
+            </foreach>
+        </if>
+        <if test="poiIds != null and poiIds.size() > 0">
+            AND le.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        <if test="isIncome != null and isIncome == 1">
+            AND le.entry_type = 'income'
+        </if>
+        <if test="isIncome != null and isIncome == 0">
+            AND le.entry_type = 'expense'
+        </if>
+        <if test="type != null and type == 1">
+            AND le.source_type = 'order'
+        </if>
+        <if test="type != null and type == 2">
+            AND le.source_type != 'order'
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                CAST(le.ledger_entry_id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                OR le.remark LIKE CONCAT('%', #{keyword}, '%')
+                OR le.operator_name LIKE CONCAT('%', #{keyword}, '%')
+                OR CAST(le.order_id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                OR om.order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.out_order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_name LIKE CONCAT('%', #{keyword}, '%')
+                OR pt.payment_type_name LIKE CONCAT('%', #{keyword}, '%')
+                OR pw.payment_way_name LIKE CONCAT('%', #{keyword}, '%')
+                OR rc.name LIKE CONCAT('%', #{keyword}, '%')
+                OR r.room_name LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+    </sql>
+
+    <select id="selectStores" resultType="com.jeez.zp.platform.vo.OrderLedgerStoreOptionVO">
+        SELECT
+            CAST(p.poi_id AS CHAR) AS id,
+            p.poi_name AS name
+        FROM pms_poi p
+        WHERE p.camp_id = #{campId}
+          AND p.status = 1
+          AND p.is_deleted = 0
+        ORDER BY p.sort_no ASC, p.poi_id ASC
+    </select>
+
+    <select id="selectProjectOptions" resultType="com.jeez.zp.platform.vo.OrderLedgerOptionVO">
+        SELECT
+            CAST(pt.payment_type_id AS CHAR) AS value,
+            pt.payment_type_name AS label
+        FROM payment_type pt
+        WHERE pt.camp_id = #{campId}
+          AND pt.status = 1
+          AND pt.is_deleted = 0
+        <if test="isIncome != null">
+            AND pt.is_income = #{isIncome}
+        </if>
+        ORDER BY pt.sort_no ASC, pt.payment_type_id ASC
+    </select>
+
+    <select id="selectPaymentWayOptions" resultType="com.jeez.zp.platform.vo.OrderLedgerOptionVO">
+        SELECT
+            CAST(pw.payment_way_id AS CHAR) AS value,
+            pw.payment_way_name AS label
+        FROM payment_way pw
+        WHERE pw.camp_id = #{campId}
+          AND pw.status = 1
+          AND pw.is_deleted = 0
+        ORDER BY pw.sort_no ASC, pw.payment_way_id ASC
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT COUNT(1)
+        <include refid="ledgerFromAndJoins"/>
+        <include refid="ledgerFilters"/>
+    </select>
+
+    <select id="selectSummary" resultType="com.jeez.zp.platform.vo.OrderLedgerSummaryQueryVO">
+        SELECT
+            COALESCE(SUM(CASE WHEN le.entry_type = 'income' THEN le.amount_cent ELSE 0 END), 0) AS totalIncomeCent,
+            COALESCE(SUM(CASE WHEN le.entry_type = 'expense' THEN le.amount_cent ELSE 0 END), 0) AS totalExpenseCent
+        <include refid="ledgerFromAndJoins"/>
+        <include refid="ledgerFilters"/>
+    </select>
+
+    <select id="selectPage" resultType="com.jeez.zp.platform.vo.OrderLedgerQueryRowVO">
+        SELECT
+            CAST(le.ledger_entry_id AS CHAR) AS ledgerEntryId,
+            CAST(le.poi_id AS CHAR) AS poiId,
+            le.entry_type AS entryType,
+            CAST(le.payment_type_id AS CHAR) AS paymentTypeId,
+            COALESCE(pt.payment_type_name, '-') AS paymentTypeName,
+            CAST(le.payment_way_id AS CHAR) AS paymentWayId,
+            COALESCE(pw.payment_way_name, '-') AS paymentWayName,
+            CAST(le.order_id AS CHAR) AS orderId,
+            le.source_type AS sourceType,
+            le.amount_cent AS amountCent,
+            le.occurred_at AS occurredAt,
+            le.operator_name AS operatorName,
+            le.remark AS remark,
+            om.order_no AS orderNo,
+            om.out_order_no AS outOrderNo,
+            om.status AS orderStatus,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            rc.name AS roomCategoryName,
+            r.room_name AS roomName
+        <include refid="ledgerFromAndJoins"/>
+        <include refid="ledgerFilters"/>
+        ORDER BY le.occurred_at DESC, le.ledger_entry_id DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+</mapper>

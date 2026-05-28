@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.OtaMapper">
+
+    <select id="selectStoreOptions" resultType="com.jeez.zp.platform.vo.OtaOptionVO">
+        SELECT
+            CAST(p.poi_id AS CHAR) AS value,
+            p.poi_name AS label
+        FROM pms_poi p
+        WHERE p.camp_id = #{campId}
+          AND p.status = 1
+          AND p.is_deleted = 0
+        ORDER BY p.sort_no ASC, p.poi_id ASC
+    </select>
+
+    <select id="selectAccounts" resultType="com.jeez.zp.platform.vo.OtaAccountQueryRowVO">
+        SELECT
+            CAST(ca.account_id AS CHAR) AS accountId,
+            ca.account_id AS accountIdRaw,
+            ca.channel_id AS channelId,
+            ca.channel_name AS channelName,
+            ca.account_name AS accountName,
+            ca.status AS status,
+            ca.authorized_at AS authorizedAt,
+            ca.updated_at AS updatedAt,
+            COALESCE(room_stat.room_type_count, 0) AS roomTypeCount,
+            COALESCE(rel_stat.mapped_room_type_count, 0) AS mappedRoomTypeCount,
+            rel_stat.last_room_sync_at AS lastRoomSyncAt
+        FROM channel_account ca
+        LEFT JOIN (
+            SELECT
+                rc.camp_id,
+                COUNT(1) AS room_type_count
+            FROM room_category rc
+            WHERE rc.status = 1
+              AND rc.is_deleted = 0
+            <if test="poiId != null">
+              AND rc.poi_id = #{poiId}
+            </if>
+            GROUP BY rc.camp_id
+        ) room_stat ON room_stat.camp_id = ca.camp_id
+        LEFT JOIN (
+            SELECT
+                rel.camp_id,
+                rel.account_id,
+                COUNT(DISTINCT rel.room_category_id) AS mapped_room_type_count,
+                MAX(rel.updated_at) AS last_room_sync_at
+            FROM channel_room_category_rel rel
+            JOIN room_category rc ON rc.room_category_id = rel.room_category_id
+                AND rc.camp_id = rel.camp_id
+                AND rc.status = 1
+                AND rc.is_deleted = 0
+            WHERE rel.shelf_status = 'on_shelf'
+              AND rel.audit_status = 'approved'
+            <if test="poiId != null">
+              AND rc.poi_id = #{poiId}
+            </if>
+            GROUP BY rel.camp_id, rel.account_id
+        ) rel_stat ON rel_stat.camp_id = ca.camp_id
+            AND rel_stat.account_id = ca.account_id
+        WHERE ca.camp_id = #{campId}
+        <if test="poiId != null">
+          AND (
+              ca.status != 'authorized'
+              OR EXISTS (
+                  SELECT 1
+                  FROM channel_poi_rel pr
+                  WHERE pr.camp_id = ca.camp_id
+                    AND pr.account_id = ca.account_id
+                    AND pr.poi_id = #{poiId}
+              )
+          )
+        </if>
+        ORDER BY ca.status = 'authorized' DESC, ca.updated_at DESC, ca.account_id ASC
+    </select>
+
+    <select id="selectDetailStoreRows" resultType="com.jeez.zp.platform.vo.OtaDetailStoreQueryRowVO">
+        SELECT
+            CAST(pr.id AS CHAR) AS id,
+            CAST(pr.account_id AS CHAR) AS accountId,
+            CAST(pr.poi_id AS CHAR) AS channelStoreId,
+            p.poi_name AS channelStoreName,
+            pr.out_poi_id AS hotelId,
+            pr.sync_status AS syncStatus,
+            COALESCE(room_stat.room_type_count, 0) AS roomTypeCount,
+            COALESCE(rel_stat.mapped_room_type_count, 0) AS mappedRoomTypeCount
+        FROM channel_poi_rel pr
+        JOIN pms_poi p ON p.poi_id = pr.poi_id
+            AND p.camp_id = pr.camp_id
+            AND p.status = 1
+            AND p.is_deleted = 0
+        LEFT JOIN (
+            SELECT
+                rc.camp_id,
+                rc.poi_id,
+                COUNT(1) AS room_type_count
+            FROM room_category rc
+            WHERE rc.status = 1
+              AND rc.is_deleted = 0
+            GROUP BY rc.camp_id, rc.poi_id
+        ) room_stat ON room_stat.camp_id = pr.camp_id
+            AND room_stat.poi_id = pr.poi_id
+        LEFT JOIN (
+            SELECT
+                rel.camp_id,
+                rel.account_id,
+                rc.poi_id,
+                COUNT(DISTINCT rel.room_category_id) AS mapped_room_type_count
+            FROM channel_room_category_rel rel
+            JOIN room_category rc ON rc.room_category_id = rel.room_category_id
+                AND rc.camp_id = rel.camp_id
+                AND rc.status = 1
+                AND rc.is_deleted = 0
+            WHERE rel.shelf_status = 'on_shelf'
+              AND rel.audit_status = 'approved'
+            GROUP BY rel.camp_id, rel.account_id, rc.poi_id
+        ) rel_stat ON rel_stat.camp_id = pr.camp_id
+            AND rel_stat.account_id = pr.account_id
+            AND rel_stat.poi_id = pr.poi_id
+        WHERE pr.camp_id = #{campId}
+        <if test="accountIds != null and accountIds.size() > 0">
+          AND pr.account_id IN
+          <foreach collection="accountIds" item="accountId" open="(" separator="," close=")">
+              #{accountId}
+          </foreach>
+        </if>
+        ORDER BY p.sort_no ASC, pr.id ASC
+    </select>
+
+    <select id="selectDetailRoomRows" resultType="com.jeez.zp.platform.vo.OtaDetailRoomQueryRowVO">
+        SELECT
+            CAST(COALESCE(rel.id, rc.room_category_id) AS CHAR) AS id,
+            CAST(COALESCE(pr.poi_id, rc.poi_id) AS CHAR) AS channelStoreId,
+            p.poi_name AS channelStoreName,
+            COALESCE(rel.out_room_category_id, CONCAT('未关联-', rc.name)) AS channelRoomType,
+            CASE
+                WHEN rel.id IS NULL THEN NULL
+                ELSE rc.name
+            END AS linkedRoomType,
+            rel.shelf_status AS shelfStatus,
+            rel.audit_status AS auditStatus
+        FROM room_category rc
+        LEFT JOIN channel_room_category_rel rel ON rel.room_category_id = rc.room_category_id
+            AND rel.camp_id = rc.camp_id
+        <if test="accountIds != null and accountIds.size() > 0">
+            AND rel.account_id IN
+            <foreach collection="accountIds" item="accountId" open="(" separator="," close=")">
+                #{accountId}
+            </foreach>
+        </if>
+        LEFT JOIN channel_poi_rel pr ON pr.account_id = rel.account_id
+            AND pr.camp_id = rel.camp_id
+            AND pr.poi_id = rc.poi_id
+        JOIN pms_poi p ON p.poi_id = rc.poi_id
+            AND p.camp_id = rc.camp_id
+            AND p.status = 1
+            AND p.is_deleted = 0
+        WHERE rc.camp_id = #{campId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+          AND (
+              rel.id IS NOT NULL
+              OR NOT EXISTS (
+                  SELECT 1
+                  FROM channel_room_category_rel existing
+                  WHERE existing.camp_id = rc.camp_id
+                    AND existing.room_category_id = rc.room_category_id
+              )
+          )
+        ORDER BY
+            CASE WHEN rel.id IS NULL THEN 1 ELSE 0 END ASC,
+            rc.sort_no ASC,
+            rc.room_category_id ASC
+    </select>
+</mapper>

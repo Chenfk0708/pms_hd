@@ -1,0 +1,153 @@
+server:
+  port: 8080
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: jeez-gateway
+  main:
+    web-application-type: reactive
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+  codec:
+    max-in-memory-size: 64MB
+  cloud:
+    gateway:
+      x-forwarded:
+        enabled: true
+        for-enabled: true
+        host-enabled: true
+        port-enabled: true
+        proto-enabled: true
+        prefix-enabled: true
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+              - PATCH
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
+      routes:
+        - id: minio-service
+          uri: ${jeez.gateway.services.minio}
+          predicates:
+            - Path=/jeez-fitness/**
+          filters:
+            - StripPrefix=0
+        - id: platform-service
+          uri: ${jeez.gateway.services.platform}
+          predicates:
+            - Path=/auth/**,/user/**,/camps/**,/camp/**,/menus/**,/menu/**,/systemConfigs/**,/systemConfig/**,/channels/**,/edition/**,/role/**,/roleAuthority/**,/paymentWays/**,/paymentTypes/**,/paymentSettings/**,/orderLedger/**,/ota/**,/distribution/**,/smsAccount/**,/smsTemplateMsgConfig/**,/roomCategories/**,/weiRoomCategories/**,/select/**
+        - id: room-service
+          uri: ${jeez.gateway.services.room}
+          predicates:
+            - Path=/room-service/**,/roomCategoryGroups/**,/rooms/**,/roomCategories/page/get,/roomStatusesToday/**,/report/dailyRoomStatus/get,/report/forwardRoomStatus/get,/roomCategoryStatuses/central/get,/roomCategoryStatuses/roomCategory/channel/get,/cleanTask/page/get,/cleaner/list/get,/cleanSettings/bootstrap
+        - id: order-service
+          uri: ${jeez.gateway.services.order}
+          predicates:
+            - Path=/order-service/**,/order/report/get
+        - id: swagger-gateway-redirect
+          uri: no://op
+          predicates:
+            - Path=/swagger-ui.html
+          filters:
+            - RedirectTo=302,/swagger-gateway.html
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      password: ${SPRING_REDIS_PASSWORD:}
+      database: 0
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
+      connect-timeout: 3000ms
+
+sa-token:
+  token-name: Authorization
+  timeout: 2592000
+  active-timeout: -1
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  token-prefix: Bearer
+  is-log: false
+  is-read-cookie: false
+  is-read-header: true
+  check-token-sign: true
+
+logging:
+  level:
+    com.jeez.gateway: INFO
+    org.springframework.cloud.gateway: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always
+  health:
+    rabbit:
+      enabled: false
+
+springdoc:
+  swagger-ui:
+    path: /swagger-gateway.html
+    try-it-out-enabled: true
+    filter: true
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs-gateway
+    enabled: true
+
+jeez:
+  gateway:
+    services:
+      minio: http://localhost:9000
+      platform: http://localhost:8090
+      room: http://localhost:8091
+      order: http://localhost:8094
+      zp-order: http://localhost:8094
+      zp-inventory: http://localhost:8092
+      zp-cleaning: http://localhost:8095
+      zp-channel: http://localhost:8097
+    auth:
+      exclude-paths:
+        - /
+        - /index.html
+        - /css/**
+        - /js/**
+        - /images/**
+        - /favicon.ico
+        - /jeez-fitness/**
+        - /swagger-ui.html
+        - /swagger-gateway.html
+        - /**/swagger-ui/**
+        - /**/v3/api-docs/**
+        - /v3/api-docs-gateway/**
+        - /swagger-resources/**
+        - /**/webjars/**
+        - /**/actuator/**
+        - /actuator/**
+        - /room-service/ping
+        - /order-service/ping
+        - /auth/login

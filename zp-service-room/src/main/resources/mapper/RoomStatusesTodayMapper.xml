@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.room.mapper.RoomStatusesTodayMapper">
+
+    <select id="selectRows" resultType="com.jeez.zp.room.vo.RoomStatusesTodayRowVO">
+        WITH ranked_order AS (
+            SELECT
+                CAST(om.room_id AS CHAR) AS roomId,
+                CAST(om.order_id AS CHAR) AS orderId,
+                om.status AS orderStatus,
+                om.payment_status AS paymentStatus,
+                om.guest_name AS guestName,
+                om.guest_mobile AS guestMobile,
+                om.remark AS orderRemark,
+                CAST(ca.channel_id AS CHAR) AS channelId,
+                ca.channel_name AS channelName,
+                om.start_at AS checkInAt,
+                om.end_at AS checkOutAt,
+                om.total_price_cent AS totalPriceCent,
+                om.total_pay_price_cent AS totalPayPriceCent,
+                om.source_type AS sourceType,
+                ROW_NUMBER() OVER (
+                    PARTITION BY om.room_id
+                    ORDER BY
+                        CASE
+                            WHEN om.status = 'checked_in' THEN 1
+                            WHEN om.status = 'booked' THEN 2
+                            WHEN om.status = 'pending' THEN 3
+                            WHEN om.status = 'refunding' THEN 4
+                            ELSE 9
+                        END ASC,
+                        om.start_at ASC,
+                        om.order_id ASC
+                ) AS rowNum
+            FROM order_main om
+            LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+                AND ca.camp_id = om.camp_id
+            WHERE om.camp_id = #{campId}
+              AND om.is_deleted = 0
+              AND om.room_id IS NOT NULL
+              AND om.status IN ('booked', 'checked_in', 'pending', 'refunding')
+              AND om.start_at &lt; #{nextDayStart}
+              AND om.end_at &gt; #{dayStart}
+        )
+        SELECT
+            CAST(r.room_id AS CHAR) AS roomId,
+            r.room_name AS roomName,
+            CAST(r.poi_id AS CHAR) AS poiId,
+            CAST(r.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName,
+            rc.sort_no AS roomCategorySeq,
+            CAST(rc.group_id AS CHAR) AS roomCategoryGroupId,
+            CAST(r.floor_id AS CHAR) AS floorId,
+            rf.floor_name AS floorName,
+            rf.sort_no AS floorSeq,
+            r.clean_status AS cleanStatus,
+            r.sale_type AS saleType,
+            r.sort_no AS roomSeq,
+            ro.orderId AS orderId,
+            ro.orderStatus AS orderStatus,
+            ro.paymentStatus AS paymentStatus,
+            ro.guestName AS guestName,
+            ro.guestMobile AS guestMobile,
+            ro.orderRemark AS orderRemark,
+            ro.channelId AS channelId,
+            ro.channelName AS channelName,
+            ro.checkInAt AS checkInAt,
+            ro.checkOutAt AS checkOutAt,
+            ro.totalPriceCent AS totalPriceCent,
+            ro.totalPayPriceCent AS totalPayPriceCent,
+            ro.sourceType AS sourceType
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        LEFT JOIN room_floor rf ON rf.floor_id = r.floor_id
+            AND rf.camp_id = r.camp_id
+            AND rf.status = 1
+            AND rf.is_deleted = 0
+        LEFT JOIN ranked_order ro ON ro.roomId = CAST(r.room_id AS CHAR)
+            AND ro.rowNum = 1
+        WHERE r.camp_id = #{campId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+        <if test="roomCategoryGroupIds != null and roomCategoryGroupIds.size() &gt; 0">
+            AND rc.group_id IN
+            <foreach collection="roomCategoryGroupIds" item="roomCategoryGroupId" open="(" separator="," close=")">
+                #{roomCategoryGroupId}
+            </foreach>
+        </if>
+        <if test="roomCategoryIds != null and roomCategoryIds.size() &gt; 0">
+            AND r.room_category_id IN
+            <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                #{roomCategoryId}
+            </foreach>
+        </if>
+        <if test="poiIds != null and poiIds.size() &gt; 0">
+            AND r.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC, rf.sort_no ASC, rf.floor_id ASC, r.sort_no ASC, r.room_id ASC
+    </select>
+</mapper>

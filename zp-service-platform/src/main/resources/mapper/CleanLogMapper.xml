@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.CleanLogMapper">
+
+    <select id="selectRows" resultType="com.jeez.zp.platform.vo.CleanLogRowVO">
+        SELECT
+            CAST(ct.clean_task_id AS CHAR) AS id,
+            DATE_FORMAT(ct.updated_at, '%Y-%m-%d %H:%i:%s') AS operatorTime,
+            cs.name AS operatorName,
+            CASE ct.task_type
+                WHEN 'checkout_clean' THEN '退房保洁'
+                WHEN 'daily_clean' THEN '日常保洁'
+                WHEN 'deep_clean' THEN '深度保洁'
+                WHEN 'night_clean' THEN '夜间保洁'
+                ELSE ct.task_type
+            END AS operatorTypeName,
+            ct.remark AS operatorDetails,
+            rc.name AS roomType,
+            r.room_name AS roomName
+        FROM clean_task ct
+        LEFT JOIN clean_staff cs ON cs.clean_staff_id = ct.clean_staff_id
+            AND cs.camp_id = ct.camp_id
+            AND cs.is_deleted = 0
+        LEFT JOIN room r ON r.room_id = ct.room_id
+            AND r.camp_id = ct.camp_id
+            AND r.is_deleted = 0
+            AND r.status = 1
+        LEFT JOIN room_category rc ON rc.room_category_id = ct.room_category_id
+            AND rc.camp_id = ct.camp_id
+            AND rc.is_deleted = 0
+            AND rc.status = 1
+        WHERE ct.camp_id = #{campId}
+        <if test="poiId != null">
+            AND ct.poi_id = #{poiId}
+        </if>
+        <if test="roomIds != null and roomIds.size() > 0">
+            AND ct.room_id IN
+            <foreach collection="roomIds" item="roomId" open="(" separator="," close=")">
+                #{roomId}
+            </foreach>
+        </if>
+        <if test="operatorId != null">
+            AND ct.clean_staff_id = #{operatorId}
+        </if>
+        <if test="operatorStartTime != null">
+            AND ct.updated_at &gt;= #{operatorStartTime}
+        </if>
+        <if test="operatorEndExclusiveTime != null">
+            AND ct.updated_at &lt; #{operatorEndExclusiveTime}
+        </if>
+        ORDER BY ct.updated_at DESC, ct.clean_task_id DESC
+    </select>
+</mapper>

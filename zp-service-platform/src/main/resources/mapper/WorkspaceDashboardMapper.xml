@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.WorkspaceDashboardMapper">
+
+    <select id="selectRoomRows" resultType="com.jeez.zp.platform.vo.WorkspaceDashboardRoomRowVO">
+        WITH ranked_order AS (
+            SELECT
+                CAST(om.room_id AS CHAR) AS roomId,
+                CAST(om.order_id AS CHAR) AS orderId,
+                om.status AS orderStatus,
+                om.start_at AS checkInAt,
+                om.end_at AS checkOutAt,
+                ROW_NUMBER() OVER (
+                    PARTITION BY om.room_id
+                    ORDER BY
+                        CASE
+                            WHEN om.status = 'checked_in' THEN 1
+                            WHEN om.status = 'booked' THEN 2
+                            WHEN om.status = 'pending' THEN 3
+                            WHEN om.status = 'refunding' THEN 4
+                            ELSE 9
+                        END ASC,
+                        om.start_at ASC,
+                        om.order_id ASC
+                ) AS rowNum
+            FROM order_main om
+            WHERE om.camp_id = #{campId}
+              AND om.is_deleted = 0
+              AND om.room_id IS NOT NULL
+              AND om.status IN ('booked', 'checked_in', 'pending', 'refunding')
+              AND om.start_at &lt; #{nextDayStart}
+              AND om.end_at &gt; #{dayStart}
+        )
+        SELECT
+            CAST(r.room_id AS CHAR) AS roomId,
+            r.clean_status AS cleanStatus,
+            r.lock_status AS lockStatus,
+            ro.orderId AS orderId,
+            ro.orderStatus AS orderStatus,
+            ro.checkInAt AS checkInAt,
+            ro.checkOutAt AS checkOutAt
+        FROM room r
+        LEFT JOIN ranked_order ro ON ro.roomId = CAST(r.room_id AS CHAR)
+            AND ro.rowNum = 1
+        WHERE r.camp_id = #{campId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+        ORDER BY r.sort_no ASC, r.room_id ASC
+    </select>
+
+    <select id="selectOrderRows" resultType="com.jeez.zp.platform.vo.WorkspaceDashboardOrderRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            om.status AS orderStatus,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.day_num AS dayNum,
+            om.total_price_cent AS totalPriceCent,
+            COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) AS commissionPriceCent,
+            CASE
+                WHEN om.settlement_amount_cent > 0 THEN om.settlement_amount_cent
+                WHEN om.total_pay_price_cent > 0 THEN GREATEST(
+                    om.total_pay_price_cent - COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                    0
+                )
+                ELSE GREATEST(
+                    om.total_price_cent - COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                    0
+                )
+            END AS businessIncomeCent,
+            COALESCE(
+                NULLIF(ca.channel_name, ''),
+                CASE
+                    WHEN om.source_type = 'frontdesk' THEN '自来客'
+                    WHEN om.source_type = 'phone' THEN '电话订单'
+                    ELSE '未知渠道'
+                END
+            ) AS channelName,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            rc.name AS roomCategoryName,
+            r.room_name AS roomName,
+            om.source_type AS sourceType
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN distribution_order do ON do.source_order_id = om.order_id
+            AND do.camp_id = om.camp_id
+            AND (do.channel_id = om.channel_id OR do.channel_id IS NULL)
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        LEFT JOIN room r ON r.room_id = om.room_id
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.order_type = 'daily_room'
+          AND om.status NOT IN ('cancelled', 'refunded', 'pending')
+          AND om.start_at &lt; #{rangeEndExclusive}
+          AND om.end_at &gt; #{rangeStart}
+        ORDER BY om.start_at ASC, om.order_id ASC
+    </select>
+
+    <select id="selectWorkspaceOrders" resultType="com.jeez.zp.platform.vo.WorkspaceOrderListRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            COALESCE(
+                NULLIF(ca.channel_name, ''),
+                CASE
+                    WHEN om.source_type = 'frontdesk' THEN '自来客'
+                    WHEN om.source_type = 'phone' THEN '电话订单'
+                    ELSE '未知渠道'
+                END
+            ) AS channelName,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            rc.name AS roomCategoryName,
+            r.room_name AS roomName,
+            om.status AS orderStatus,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.day_num AS dayNum,
+            om.created_at AS createdAt
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        LEFT JOIN room r ON r.room_id = om.room_id
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.order_type = 'daily_room'
+          AND om.status IN ('booked', 'checked_in', 'pending')
+        <if test="keyword != null and keyword != ''">
+            AND (
+                CAST(om.order_id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                OR om.order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.out_order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_name LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_mobile LIKE CONCAT('%', #{keyword}, '%')
+                OR rc.name LIKE CONCAT('%', #{keyword}, '%')
+                OR r.room_name LIKE CONCAT('%', #{keyword}, '%')
+                OR ca.channel_name LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        ORDER BY om.start_at ASC, om.created_at ASC, om.order_id ASC
+    </select>
+
+    <select id="countActiveRooms" resultType="java.lang.Integer">
+        SELECT COUNT(1)
+        FROM room r
+        WHERE r.camp_id = #{campId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+    </select>
+
+    <select id="sumRoomCategoryCount" resultType="java.lang.Integer">
+        SELECT COALESCE(SUM(rc.room_count), 0)
+        FROM room_category rc
+        WHERE rc.camp_id = #{campId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+    </select>
+
+    <select id="countExceptionOrders" resultType="java.lang.Integer">
+        SELECT COUNT(1)
+        FROM order_main om
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.status IN ('refunding', 'cancelled', 'refunded')
+    </select>
+</mapper>

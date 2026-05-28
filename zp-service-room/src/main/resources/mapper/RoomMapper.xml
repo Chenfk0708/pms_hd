@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.room.mapper.RoomMapper">
+
+    <sql id="roomCategoryIdFilter">
+        <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">
+            AND rc.room_category_id IN
+            <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                #{roomCategoryId}
+            </foreach>
+        </if>
+    </sql>
+
+    <select id="selectRoomCategoryGroups" resultType="com.jeez.zp.room.vo.RoomCategoryRoomsGroupVO">
+        SELECT
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName
+        FROM room_category rc
+        WHERE rc.camp_id = #{campId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        <include refid="roomCategoryIdFilter"/>
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC
+    </select>
+
+    <select id="selectRooms" resultType="com.jeez.zp.room.vo.RoomItemVO">
+        SELECT
+            CAST(r.room_category_id AS CHAR) AS roomCategoryId,
+            CAST(r.room_id AS CHAR) AS roomId,
+            r.room_name AS roomName,
+            CASE
+                WHEN r.clean_status = 'dirty' THEN 1
+                WHEN r.clean_status = 'clean' THEN 0
+                ELSE NULL
+            END AS isDirty,
+            CASE
+                WHEN r.lock_status = 'offline' THEN 0
+                WHEN r.lock_status IS NULL OR r.lock_status = '' THEN NULL
+                ELSE 1
+            END AS isCanBooking,
+            CAST(r.floor_id AS CHAR) AS floorId,
+            rf.floor_name AS floorName,
+            0 AS seq,
+            r.lock_status AS lockStatus,
+            r.sale_type AS saleType,
+            r.clean_status AS cleanStatus
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        LEFT JOIN room_floor rf ON rf.floor_id = r.floor_id
+            AND rf.is_deleted = 0
+            AND rf.status = 1
+        WHERE r.camp_id = #{campId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+        <include refid="roomCategoryIdFilter"/>
+        <if test="saleType != null and saleType == 1">
+            AND (r.sale_type IS NULL OR r.sale_type != 'hourly')
+        </if>
+        <if test="saleType != null and saleType == 2">
+            AND r.sale_type = 'hourly'
+        </if>
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC, r.sort_no ASC, r.room_id ASC
+    </select>
+</mapper>

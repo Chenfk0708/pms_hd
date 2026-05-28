@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.ComprehensiveMonthlyReportMapper">
+
+    <select id="selectOrderRows" resultType="com.jeez.zp.platform.vo.ComprehensiveMonthlyReportQueryRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.day_num AS dayNum,
+            om.total_price_cent AS totalPriceCent,
+            COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) AS commissionPriceCent,
+            CASE
+                WHEN om.settlement_amount_cent > 0 THEN om.settlement_amount_cent
+                WHEN om.total_pay_price_cent > 0 THEN GREATEST(
+                    om.total_pay_price_cent - COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                    0
+                )
+                ELSE GREATEST(
+                    om.total_price_cent - COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                    0
+                )
+            END AS businessIncomeCent,
+            om.created_at AS createdAt,
+            CAST(om.created_by AS CHAR) AS userId,
+            COALESCE(NULLIF(pu.nick_name, ''), '系统自动') AS userName
+        FROM order_main om
+        LEFT JOIN distribution_order do ON do.source_order_id = om.order_id
+            AND do.camp_id = om.camp_id
+            AND (do.channel_id = om.channel_id OR do.channel_id IS NULL)
+        LEFT JOIN pms_user pu ON pu.user_id = om.created_by
+            AND pu.is_deleted = 0
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.order_type = 'daily_room'
+          AND om.status NOT IN ('cancelled', 'refunded', 'pending')
+          AND om.start_at &lt; #{rangeEndExclusive}
+          AND om.end_at &gt; #{rangeStart}
+        ORDER BY om.start_at DESC, om.order_id DESC
+    </select>
+
+    <select id="countActiveRooms" resultType="java.lang.Integer">
+        SELECT COUNT(1)
+        FROM room r
+        WHERE r.camp_id = #{campId}
+          AND r.is_deleted = 0
+          AND r.status = 1
+    </select>
+
+    <select id="sumRoomCategoryCount" resultType="java.lang.Integer">
+        SELECT COALESCE(SUM(rc.room_count), 0)
+        FROM room_category rc
+        WHERE rc.camp_id = #{campId}
+          AND rc.is_deleted = 0
+          AND rc.status = 1
+    </select>
+</mapper>

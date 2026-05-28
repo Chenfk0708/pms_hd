@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.OrderQueryMapper">
+
+    <select id="selectHouseOrders" resultType="com.jeez.zp.platform.vo.OrderQueryRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            om.out_order_no AS outOrderId,
+            COALESCE(CAST(ca.channel_id AS CHAR), '0') AS channelId,
+            COALESCE(
+                ca.channel_name,
+                CASE
+                    WHEN om.source_type = 'frontdesk' THEN '自来客'
+                    WHEN om.source_type = 'phone' THEN '电话订单'
+                    ELSE '自来客'
+                END
+            ) AS channelName,
+            COALESCE(
+                ca.channel_name,
+                CASE
+                    WHEN om.source_type = 'frontdesk' THEN '自来客'
+                    WHEN om.source_type = 'phone' THEN '电话订单'
+                    ELSE '自来客'
+                END
+            ) AS orderChannelName,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            CAST(om.poi_id AS CHAR) AS poiId,
+            CAST(om.room_category_id AS CHAR) AS roomCategoryId,
+            om.status AS status,
+            om.payment_status AS paymentStatus,
+            CAST(om.payment_way_id AS CHAR) AS paymentWayId,
+            om.source_type AS sourceType,
+            om.total_price_cent AS totalPriceCent,
+            om.total_pay_price_cent AS totalPayPriceCent,
+            om.refund_price_cent AS refundPriceCent,
+            COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) AS commissionPriceCent,
+            gm.selling_price_cent AS sellingPriceCent,
+            om.settlement_amount_cent AS settlementAmountCent,
+            COALESCE(om.day_num, 1) AS count,
+            gm.room_category_type AS roomCategoryType,
+            CAST(gm.category_id AS CHAR) AS categoryId,
+            gm.category_name AS categoryName,
+            pw.payment_way_name AS paymentWayName,
+            COALESCE(om.out_order_no, om.order_no) AS confirmNo,
+            om.created_at AS createdAt,
+            om.updated_at AS updatedAt,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            poi.poi_name AS poiName,
+            rc.name AS roomCategoryName,
+            COALESCE(gm.name, '全天房') AS roomCategoryProductName,
+            r.room_name AS roomName
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN distribution_order do ON do.source_order_id = om.order_id
+            AND do.camp_id = om.camp_id
+            AND do.channel_id = om.channel_id
+        LEFT JOIN pms_poi poi ON poi.poi_id = om.poi_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        LEFT JOIN room r ON r.room_id = om.room_id
+        LEFT JOIN goods_main gm ON gm.goods_id = om.goods_id
+            AND gm.camp_id = om.camp_id
+            AND gm.is_deleted = 0
+        LEFT JOIN payment_way pw ON pw.payment_way_id = om.payment_way_id
+            AND pw.camp_id = om.camp_id
+            AND pw.is_deleted = 0
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+        <if test="keyword != null and keyword != ''">
+            AND (
+                CAST(om.order_id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                OR om.order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.out_order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_name LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_mobile LIKE CONCAT('%', #{keyword}, '%')
+                OR gm.name LIKE CONCAT('%', #{keyword}, '%')
+                OR rc.name LIKE CONCAT('%', #{keyword}, '%')
+                OR r.room_name LIKE CONCAT('%', #{keyword}, '%')
+                OR poi.poi_name LIKE CONCAT('%', #{keyword}, '%')
+                OR ca.channel_name LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        ORDER BY om.created_at DESC, om.order_id DESC
+    </select>
+</mapper>

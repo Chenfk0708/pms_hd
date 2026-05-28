@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.RolePermissionMapper">
+
+    <select id="selectRoleSummaries" resultType="com.jeez.zp.platform.vo.RoleSummaryVO">
+        SELECT
+            r.role_id AS roleId,
+            r.role_name AS roleName,
+            COALESCE(NULLIF(r.remark, ''), CONCAT(r.role_name, '&#35282;&#33394;')) AS description,
+            COALESCE(member_stats.member_count, 0) AS memberCount,
+            CASE
+                WHEN r.is_system = 1 OR COALESCE(member_stats.member_count, 0) > 0 THEN FALSE
+                ELSE TRUE
+            END AS canDelete,
+            DATE_FORMAT(r.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM pms_role r
+        LEFT JOIN (
+            SELECT role_id, COUNT(*) AS member_count
+            FROM pms_member
+            WHERE camp_id = #{campId}
+              AND is_deleted = 0
+              AND status = 1
+            GROUP BY role_id
+        ) member_stats ON member_stats.role_id = r.role_id
+        WHERE r.camp_id = #{campId}
+          AND r.is_deleted = 0
+          AND r.status = 1
+        <if test="keyword != null and keyword != ''">
+          AND (
+              r.role_name LIKE CONCAT('%', #{keyword}, '%')
+              OR r.role_code LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        ORDER BY r.is_system DESC, r.role_id ASC
+    </select>
+
+    <select id="selectRoleSummary" resultType="com.jeez.zp.platform.vo.RoleSummaryVO">
+        SELECT
+            r.role_id AS roleId,
+            r.role_name AS roleName,
+            COALESCE(NULLIF(r.remark, ''), CONCAT(r.role_name, '&#35282;&#33394;')) AS description,
+            COALESCE(member_stats.member_count, 0) AS memberCount,
+            CASE
+                WHEN r.is_system = 1 OR COALESCE(member_stats.member_count, 0) > 0 THEN FALSE
+                ELSE TRUE
+            END AS canDelete,
+            DATE_FORMAT(r.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM pms_role r
+        LEFT JOIN (
+            SELECT role_id, COUNT(*) AS member_count
+            FROM pms_member
+            WHERE camp_id = #{campId}
+              AND is_deleted = 0
+              AND status = 1
+            GROUP BY role_id
+        ) member_stats ON member_stats.role_id = r.role_id
+        WHERE r.camp_id = #{campId}
+          AND r.role_id = #{roleId}
+          AND r.is_deleted = 0
+          AND r.status = 1
+        LIMIT 1
+    </select>
+
+    <select id="selectRolePermissionGrants" resultType="com.jeez.zp.platform.vo.RolePermissionGrantVO">
+        SELECT
+            SUBSTRING_INDEX(ad.authority_code, ':', 1) AS moduleId,
+            ad.module_name AS moduleName,
+            CASE
+                WHEN ad.authority_code LIKE '%:view' THEN '&#26597;&#30475;'
+                WHEN ad.authority_code LIKE '%:edit' THEN '&#25805;&#20316;'
+                WHEN ad.authority_code LIKE '%:config' THEN '&#37197;&#32622;'
+                WHEN ad.authority_code LIKE '%:dispatch' THEN '&#27966;&#21333;'
+                ELSE ad.authority_name
+            END AS permissionLabel,
+            ad.seq_no AS seqNo
+        FROM pms_role_authority pra
+        JOIN authority_dict ad ON ad.authority_id = pra.authority_id
+        WHERE pra.camp_id = #{campId}
+          AND pra.role_id = #{roleId}
+          AND ad.status = 1
+        ORDER BY ad.seq_no ASC, ad.authority_id ASC
+    </select>
+</mapper>

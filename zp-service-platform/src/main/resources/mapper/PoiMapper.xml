@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.PoiMapper">
+
+    <sql id="poiFilters">
+        FROM pms_poi p
+        WHERE p.camp_id = #{campId}
+          AND p.status = 1
+          AND p.is_deleted = 0
+        <if test="isAvailability != null">
+            AND p.is_availability = #{isAvailability}
+        </if>
+        <if test="channelId != null">
+            AND EXISTS (
+                SELECT 1
+                FROM channel_poi_rel rel
+                JOIN channel_account ca ON ca.account_id = rel.account_id
+                    AND ca.camp_id = rel.camp_id
+                WHERE rel.camp_id = p.camp_id
+                  AND rel.poi_id = p.poi_id
+                  AND ca.channel_id = #{channelId}
+            )
+        </if>
+    </sql>
+
+    <select id="countPage" resultType="long">
+        SELECT COUNT(1)
+        <include refid="poiFilters"/>
+    </select>
+
+    <select id="selectPage" resultType="com.jeez.zp.platform.vo.PoiPageItemVO">
+        SELECT
+            CAST(p.poi_id AS CHAR) AS poiId,
+            p.poi_name AS poiName,
+            CAST(p.poi_id AS CHAR) AS id,
+            p.poi_name AS name,
+            p.poi_name AS label,
+            CAST(p.poi_id AS CHAR) AS value
+        <include refid="poiFilters"/>
+        ORDER BY p.sort_no ASC, p.poi_id ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+</mapper>

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.WeiRoomCategoryMapper">
+
+    <sql id="coverPhotoSubquery">
+        SELECT COALESCE(m.media_url, mr.url)
+        FROM goods_room_category_rel rel
+        JOIN room_category_media m ON m.room_category_id = rel.room_category_id
+            AND m.status = 1
+        LEFT JOIN media_resource mr ON mr.media_resource_id = m.media_resource_id
+            AND mr.is_deleted = 0
+        WHERE rel.goods_id = gm.goods_id
+        ORDER BY CASE WHEN m.scene_type = 'cover' THEN 0 ELSE 1 END, m.sort_no ASC, m.media_id ASC
+        LIMIT 1
+    </sql>
+
+    <select id="selectCatalogRows" resultType="com.jeez.zp.platform.vo.WeiRoomCategoryCatalogRowVO">
+        SELECT
+            gm.goods_id AS goodsId,
+            gm.goods_type AS rawGoodsType,
+            gm.name AS channelRoomCategoryName,
+            gm.room_category_type AS roomCategoryType,
+            CAST((
+                SELECT rel.room_category_id
+                FROM goods_room_category_rel rel
+                WHERE rel.goods_id = gm.goods_id
+                ORDER BY rel.id ASC
+                LIMIT 1
+            ) AS CHAR) AS parentRoomCategoryId,
+            CAST((
+                SELECT m.media_resource_id
+                FROM goods_room_category_rel rel
+                JOIN room_category_media m ON m.room_category_id = rel.room_category_id
+                    AND m.status = 1
+                WHERE rel.goods_id = gm.goods_id
+                ORDER BY CASE WHEN m.scene_type = 'cover' THEN 0 ELSE 1 END, m.sort_no ASC, m.media_id ASC
+                LIMIT 1
+            ) AS CHAR) AS mainPhotoMediaId,
+            (<include refid="coverPhotoSubquery"/>) AS mainPhotoMediaUrl,
+            (<include refid="coverPhotoSubquery"/>) AS mainPhoto,
+            gm.selling_price_cent AS defaultSellingPrice,
+            gm.original_price_cent AS defaultOriginalPrice,
+            gm.settlement_price_cent AS defaultSettlementPrice,
+            gm.stock_mode AS stockMode,
+            gm.shelf_status AS shelfStatus,
+            CAST(UNIX_TIMESTAMP(gm.effective_start_at) * 1000 AS SIGNED) AS effectiveStartTime,
+            CAST(UNIX_TIMESTAMP(gm.effective_end_at) * 1000 AS SIGNED) AS effectiveEndTime,
+            gm.description AS description,
+            CAST((
+                SELECT dp.distribution_product_id
+                FROM distribution_product dp
+                WHERE dp.goods_id = gm.goods_id
+                  AND dp.status = 1
+                ORDER BY dp.distribution_product_id ASC
+                LIMIT 1
+            ) AS CHAR) AS applyId
+        FROM goods_main gm
+        WHERE gm.camp_id = #{campId}
+          AND gm.is_deleted = 0
+          AND gm.status = 'published'
+        <if test="roomCategoryTypes != null and !roomCategoryTypes.isEmpty()">
+            AND gm.room_category_type IN
+            <foreach collection="roomCategoryTypes" item="roomCategoryType" open="(" separator="," close=")">
+                #{roomCategoryType}
+            </foreach>
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                gm.name LIKE CONCAT('%', #{keyword}, '%')
+                OR gm.description LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        ORDER BY gm.goods_id ASC
+    </select>
+
+    <select id="selectProductRows" resultType="com.jeez.zp.platform.vo.WeiRoomCategoryProductRowVO">
+        SELECT
+            gs.goods_id AS goodsId,
+            CAST(gs.goods_sku_id AS CHAR) AS roomCategoryProductId,
+            gs.sku_name AS roomCategoryProductName,
+            gs.selling_price_cent AS sellingPrice,
+            gs.original_price_cent AS originalPrice,
+            gm.settlement_price_cent AS settlementPrice,
+            CASE
+                WHEN gm.shelf_status = 'on_shelf' AND (gm.stock_mode = 'unlimited' OR gs.stock > 0) THEN 1
+                ELSE 0
+            END AS isCanBooking,
+            gs.stock AS stock,
+            CASE
+                WHEN gm.stock_mode = 'unlimited' THEN 1
+                ELSE 0
+            END AS stockMode,
+            CAST((
+                SELECT m.media_resource_id
+                FROM goods_room_category_rel rel
+                JOIN room_category_media m ON m.room_category_id = rel.room_category_id
+                    AND m.status = 1
+                WHERE rel.goods_id = gs.goods_id
+                ORDER BY CASE WHEN m.scene_type = 'cover' THEN 0 ELSE 1 END, m.sort_no ASC, m.media_id ASC
+                LIMIT 1
+            ) AS CHAR) AS photoMediaId,
+            (
+                SELECT COALESCE(m.media_url, mr.url)
+                FROM goods_room_category_rel rel
+                JOIN room_category_media m ON m.room_category_id = rel.room_category_id
+                    AND m.status = 1
+                LEFT JOIN media_resource mr ON mr.media_resource_id = m.media_resource_id
+                    AND mr.is_deleted = 0
+                WHERE rel.goods_id = gs.goods_id
+                ORDER BY CASE WHEN m.scene_type = 'cover' THEN 0 ELSE 1 END, m.sort_no ASC, m.media_id ASC
+                LIMIT 1
+            ) AS photoMediaUrl,
+            gs.sort_no AS seq
+        FROM goods_sku gs
+        JOIN goods_main gm ON gm.goods_id = gs.goods_id
+            AND gm.is_deleted = 0
+        WHERE gs.is_deleted = 0
+          AND gs.status = 'published'
+          AND gs.goods_id IN
+          <foreach collection="goodsIds" item="goodsId" open="(" separator="," close=")">
+              #{goodsId}
+          </foreach>
+        ORDER BY gs.goods_id ASC, gs.sort_no ASC, gs.goods_sku_id ASC
+    </select>
+</mapper>

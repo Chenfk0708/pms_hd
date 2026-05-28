@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.room.mapper.RoomCategoryPricingMapper">
+
+    <select id="selectRows" resultType="com.jeez.zp.room.vo.RoomCategoryPricingRowVO">
+        SELECT
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName,
+            CAST(ch.channel_id AS CHAR) AS channelId,
+            ch.channel_name AS channelName,
+            commission_info.commission_rate AS commissionRate,
+            goods_info.product_name AS productName,
+            goods_info.normal_price AS normalPrice,
+            goods_info.normal_actual_sale_price AS normalActualSalePrice
+        FROM room_category rc
+        JOIN (
+            SELECT
+                rel.camp_id AS camp_id,
+                rel.room_category_id AS room_category_id,
+                ca.channel_id AS channel_id,
+                ca.channel_name AS channel_name,
+                MIN(ca.account_id) AS sort_account_id
+            FROM channel_room_category_rel rel
+            JOIN channel_account ca ON ca.account_id = rel.account_id
+                AND ca.camp_id = rel.camp_id
+            WHERE ca.status = 'authorized'
+              AND rel.shelf_status = 'on_shelf'
+              AND rel.audit_status = 'approved'
+            GROUP BY rel.camp_id, rel.room_category_id, ca.channel_id, ca.channel_name
+        ) ch ON ch.camp_id = rc.camp_id
+            AND ch.room_category_id = rc.room_category_id
+        LEFT JOIN (
+            SELECT
+                idx.camp_id AS camp_id,
+                idx.room_category_id AS room_category_id,
+                CAST(
+                    ROUND(
+                        CAST(JSON_UNQUOTE(JSON_EXTRACT(dp.commission_rule_json, '$.rate')) AS DECIMAL(10, 4)) * 100,
+                        0
+                    ) AS UNSIGNED
+                ) AS commission_rate
+            FROM distribution_product dp
+            JOIN (
+                SELECT
+                    dp.camp_id AS camp_id,
+                    grr.room_category_id AS room_category_id,
+                    MIN(dp.distribution_product_id) AS distribution_product_id
+                FROM distribution_product dp
+                JOIN goods_room_category_rel grr ON grr.goods_id = dp.goods_id
+                WHERE dp.status = 1
+                GROUP BY dp.camp_id, grr.room_category_id
+            ) idx ON idx.distribution_product_id = dp.distribution_product_id
+        ) commission_info ON commission_info.camp_id = rc.camp_id
+            AND commission_info.room_category_id = rc.room_category_id
+        LEFT JOIN (
+            SELECT
+                idx.camp_id AS camp_id,
+                idx.room_category_id AS room_category_id,
+                gm.name AS product_name,
+                gm.selling_price_cent AS normal_price,
+                gm.selling_price_cent AS normal_actual_sale_price
+            FROM goods_main gm
+            JOIN (
+                SELECT
+                    gm.camp_id AS camp_id,
+                    grr.room_category_id AS room_category_id,
+                    MIN(gm.goods_id) AS goods_id
+                FROM goods_main gm
+                JOIN goods_room_category_rel grr ON grr.goods_id = gm.goods_id
+                WHERE gm.is_deleted = 0
+                GROUP BY gm.camp_id, grr.room_category_id
+            ) idx ON idx.goods_id = gm.goods_id
+        ) goods_info ON goods_info.camp_id = rc.camp_id
+            AND goods_info.room_category_id = rc.room_category_id
+        WHERE rc.camp_id = #{campId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">
+            AND rc.room_category_id IN
+            <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                #{roomCategoryId}
+            </foreach>
+        </if>
+        <if test="channelIds != null and channelIds.size() > 0">
+            AND ch.channel_id IN
+            <foreach collection="channelIds" item="channelId" open="(" separator="," close=")">
+                #{channelId}
+            </foreach>
+        </if>
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC, ch.sort_account_id ASC, ch.channel_id ASC
+    </select>
+</mapper>
