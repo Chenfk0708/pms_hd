@@ -13,4 +13,5 @@ public class RoomCategoryPricingRowVO {
     private String productName;
     private Long normalPrice;
     private Long normalActualSalePrice;
+    private String statusPricesText;
 }

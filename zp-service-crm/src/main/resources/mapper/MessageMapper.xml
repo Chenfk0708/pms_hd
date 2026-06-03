@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.crm.mapper.MessageMapper">
+
+    <select id="selectMessages" resultType="com.jeez.zp.crm.vo.MessageItemVO">
+        SELECT
+            CAST(sm.message_id AS CHAR) AS messageId,
+            sm.group_type AS groupType,
+            sm.title AS title,
+            sm.content AS content,
+            sm.related_type AS relatedType,
+            CAST(sm.related_id AS CHAR) AS relatedId,
+            sm.priority AS priority,
+            CASE WHEN smr.id IS NULL THEN FALSE ELSE TRUE END AS isRead,
+            DATE_FORMAT(sm.created_at, '%Y-%m-%d %H:%i') AS createdAt
+        FROM system_message sm
+        LEFT JOIN system_message_read smr ON smr.message_id = sm.message_id
+            AND smr.user_id = #{userId}
+            AND smr.is_read = 1
+        WHERE sm.camp_id = #{campId}
+          AND sm.status = 1
+        <if test="groupType != null and groupType != ''">
+            AND sm.group_type = #{groupType}
+        </if>
+        ORDER BY sm.created_at DESC, sm.message_id DESC
+    </select>
+
+    <select id="countUnread" resultType="int">
+        SELECT COUNT(1)
+        FROM system_message sm
+        LEFT JOIN system_message_read smr ON smr.message_id = sm.message_id
+            AND smr.user_id = #{userId}
+            AND smr.is_read = 1
+        WHERE sm.camp_id = #{campId}
+          AND sm.status = 1
+        <if test="groupType != null and groupType != ''">
+            AND sm.group_type = #{groupType}
+        </if>
+          AND smr.id IS NULL
+    </select>
+
+    <select id="selectUnreadMessageIds" resultType="long">
+        SELECT sm.message_id
+        FROM system_message sm
+        LEFT JOIN system_message_read smr ON smr.message_id = sm.message_id
+            AND smr.user_id = #{userId}
+            AND smr.is_read = 1
+        WHERE sm.camp_id = #{campId}
+          AND sm.status = 1
+        <if test="groupType != null and groupType != ''">
+            AND sm.group_type = #{groupType}
+        </if>
+          AND smr.id IS NULL
+    </select>
+
+    <insert id="markRead">
+        INSERT INTO system_message_read (
+            id,
+            message_id,
+            user_id,
+            is_read,
+            read_at,
+            created_at
+        ) VALUES (
+            #{id},
+            #{messageId},
+            #{userId},
+            1,
+            NOW(),
+            NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            is_read = 1,
+            read_at = NOW()
+    </insert>
+</mapper>

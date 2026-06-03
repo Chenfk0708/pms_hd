@@ -35,10 +35,10 @@ class PaymentTypeQueryIT {
     @Test
     @Timeout(60)
     void paymentTypesGet_shouldReturnFlatCampPaymentTypesIncludingDisabledItems() throws Exception {
-        insertPaymentTypeGroup(98101L, 21, "?????A", 2, 1, 240);
-        insertPaymentTypeGroup(98102L, 22, "?????B", 3, 0, 241);
-        insertPaymentType(98201L, 98101L, "?????A", 21, "?????A", 2, 1, 0, 1, 1, 240);
-        insertPaymentType(98202L, 98102L, "?????B", 22, "?????B", 3, 0, 1, 0, 0, 241);
+        insertPaymentTypeGroup(98101L, 21, "微信支付A", 2, 1, 240);
+        insertPaymentTypeGroup(98102L, 22, "现金支付B", 3, 0, 241);
+        insertPaymentType(98201L, 98101L, "微信支付A", 21, "微信支付A", 2, 1, 0, 1, 1, 240);
+        insertPaymentType(98202L, 98102L, "现金支付B", 22, "现金支付B", 3, 0, 1, 0, 0, 241);
 
         mockMvc.perform(post("/paymentTypes/get")
                         .header(AUTH_VERIFIED_HEADER, "true")
@@ -53,14 +53,14 @@ class PaymentTypeQueryIT {
                 .andExpect(jsonPath("$.timestamp").exists())
                 .andExpect(jsonPath("$.data.paymentTypes[*].paymentTypeId", hasItem("98201")))
                 .andExpect(jsonPath("$.data.paymentTypes[*].paymentTypeId", hasItem("98202")))
-                .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98201')].paymentTypeName", hasItem("?????A")))
+                .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98201')].paymentTypeName", hasItem("微信支付A")))
                 .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98201')].ignoreOrderGetItem", hasItem(1)))
                 .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98201')].isCustom", hasItem(0)))
                 .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98201')].isIncome", hasItem(1)))
                 .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98201')].isEnable", hasItem(1)))
                 .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98201')].bizType", hasItem(2)))
                 .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98201')].groupType", hasItem(21)))
-                .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98202')].paymentTypeName", hasItem("?????B")))
+                .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98202')].paymentTypeName", hasItem("现金支付B")))
                 .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98202')].isEnable", hasItem(0)))
                 .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98202')].isCustom", hasItem(1)))
                 .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98202')].isIncome", hasItem(0)));
@@ -69,8 +69,8 @@ class PaymentTypeQueryIT {
     @Test
     @Timeout(60)
     void paymentTypesGet_shouldFallbackCurrentCampWhenCampIdBlank() throws Exception {
-        insertPaymentTypeGroup(98103L, 23, "?????", 2, 1, 242);
-        insertPaymentType(98203L, 98103L, "?????", 23, "?????", 2, 1, 0, 0, 1, 242);
+        insertPaymentTypeGroup(98103L, 23, "储值支付", 2, 1, 242);
+        insertPaymentType(98203L, 98103L, "储值支付", 23, "储值支付", 2, 1, 0, 0, 1, 242);
 
         mockMvc.perform(post("/paymentTypes/get")
                         .header(AUTH_VERIFIED_HEADER, "true")
@@ -82,7 +82,7 @@ class PaymentTypeQueryIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.paymentTypes[*].paymentTypeId", hasItem("98203")))
-                .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98203')].paymentTypeName", hasItem("?????")));
+                .andExpect(jsonPath("$.data.paymentTypes[?(@.paymentTypeId=='98203')].paymentTypeName", hasItem("储值支付")));
     }
 
     @Test
@@ -97,6 +97,24 @@ class PaymentTypeQueryIT {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(40301))
+                .andExpect(jsonPath("$.message").value("无权访问当前门店支付方式"))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.timestamp").exists());
+    }
+
+    @Test
+    @Timeout(60)
+    void paymentTypesGet_shouldReturnReadableMessageWhenCurrentUserCampMissing() throws Exception {
+        mockMvc.perform(post("/paymentTypes/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "999999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campId":"10001"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40401))
+                .andExpect(jsonPath("$.message").value("当前用户未绑定可用门店"))
                 .andExpect(jsonPath("$.traceId").exists())
                 .andExpect(jsonPath("$.timestamp").exists());
     }

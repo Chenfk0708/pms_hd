@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.order.mapper.CouponMapper">
+
+    <select id="selectCoupons" resultType="com.jeez.zp.order.vo.CouponRowVO">
+        SELECT
+            CAST(gm.goods_id AS CHAR) AS id,
+            CAST(gm.goods_id AS CHAR) AS couponId,
+            gm.name AS name,
+            gm.name AS couponName,
+            COALESCE(NULLIF(gm.category_name, ''), '满减券') AS type,
+            COALESCE(NULLIF(gm.category_name, ''), '满减券') AS typeName,
+            FLOOR(COALESCE(gm.original_price_cent, 0) / 100) AS thresholdAmount,
+            FLOOR(COALESCE(gm.selling_price_cent, 0) / 100) AS discountAmount,
+            COALESCE(GROUP_CONCAT(DISTINCT rc.name ORDER BY rc.name SEPARATOR '、'), '部分房型可用') AS scopeText,
+            COALESCE(gm.stock, 0) AS sendLimit,
+            COALESCE(CAST(REGEXP_SUBSTR(COALESCE(gm.stock_mode, ''), '[0-9]+') AS UNSIGNED), 1) AS perUserLimit,
+            COALESCE(NULLIF(gm.reservation_note, ''), '所有人可以领') AS receiveRuleText,
+            CASE
+                WHEN gm.shelf_status = 'on_shelf' THEN 1
+                ELSE 0
+            END AS shelfStatus,
+            CASE
+                WHEN gm.shelf_status = 'on_shelf' THEN 1
+                ELSE 0
+            END AS status,
+            gm.created_at AS createdAt,
+            gm.updated_at AS updatedAt
+        FROM goods_main gm
+        LEFT JOIN goods_room_category_rel grcr ON grcr.goods_id = gm.goods_id
+        LEFT JOIN room_category rc ON rc.room_category_id = grcr.room_category_id
+        WHERE gm.camp_id = #{campId}
+          AND gm.goods_type = 'coupon'
+          AND gm.is_deleted = 0
+        <if test="shelfStatus != null">
+            AND CASE WHEN gm.shelf_status = 'on_shelf' THEN 1 ELSE 0 END = #{shelfStatus}
+        </if>
+        GROUP BY
+            gm.goods_id,
+            gm.name,
+            gm.category_name,
+            gm.original_price_cent,
+            gm.selling_price_cent,
+            gm.stock,
+            gm.stock_mode,
+            gm.reservation_note,
+            gm.shelf_status,
+            gm.created_at,
+            gm.updated_at
+        ORDER BY gm.created_at DESC, gm.goods_id DESC
+    </select>
+
+    <select id="selectCouponSendConfigs" resultType="com.jeez.zp.order.vo.CouponSendConfigRowVO">
+        SELECT
+            CAST(csc.config_id AS CHAR) AS id,
+            CAST(csc.coupon_id AS CHAR) AS couponId,
+            gm.name AS couponName,
+            csc.send_type AS sendType,
+            COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(csc.rule_json, '$.sentCount')) AS UNSIGNED), 0) AS sentCount,
+            csc.created_at AS createdAtValue,
+            csc.status AS status
+        FROM coupon_send_config csc
+        JOIN goods_main gm ON gm.goods_id = csc.coupon_id
+            AND gm.camp_id = csc.camp_id
+            AND gm.goods_type = 'coupon'
+            AND gm.is_deleted = 0
+        WHERE csc.camp_id = #{campId}
+        ORDER BY csc.created_at DESC, csc.config_id DESC
+    </select>
+</mapper>

@@ -1,5 +1,6 @@
 package com.jeez.zp.platform.service;
 
+import com.jeez.zp.platform.dto.request.VersionSubscriptionOrderSubmitRequest;
 import com.jeez.zp.platform.vo.CampsResponseVO;
 import com.jeez.zp.platform.vo.CampDetailVO;
 import com.jeez.zp.platform.vo.ChannelsResponseVO;
@@ -9,6 +10,7 @@ import com.jeez.zp.platform.vo.MenuOptionJsonsVO;
 import com.jeez.zp.platform.vo.MenuProjectVO;
 import com.jeez.zp.platform.vo.SystemConfigsResponseVO;
 import com.jeez.zp.platform.vo.UserOwnVO;
+import com.jeez.zp.platform.vo.VersionSubscriptionOrderSubmitVO;
 
 import java.util.List;
 
@@ -31,4 +33,6 @@ public interface PlatformBootstrapService {
     ChannelsResponseVO getChannels(Long campId, Long userId);
 
     EditionResourceVO getEditionResource(Long campId, Long userId);
+
+    VersionSubscriptionOrderSubmitVO submitVersionSubscriptionOrder(VersionSubscriptionOrderSubmitRequest request, Long userId);
 }

@@ -2,17 +2,25 @@ package com.jeez.zp.platform.controller;
 
 import com.jeez.zp.platform.api.HudsonResponse;
 import com.jeez.zp.platform.api.TraceIdFactory;
+import com.jeez.zp.platform.dto.request.RoomCategoryDeleteRequest;
 import com.jeez.zp.platform.dto.request.RoomCategoryDetailRequest;
+import com.jeez.zp.platform.dto.request.RoomCategoryLinkageRequest;
 import com.jeez.zp.platform.dto.request.RoomCategoryPageRequest;
+import com.jeez.zp.platform.dto.request.RoomCategorySaveRequest;
 import com.jeez.zp.platform.dto.request.SelectRoomCategoryPageRequest;
 import com.jeez.zp.platform.security.LoginUserContext;
 import com.jeez.zp.platform.service.RoomCategoryService;
 import com.jeez.zp.platform.vo.RoomCategoryDetailResponseVO;
+import com.jeez.zp.platform.vo.RoomCategoryEditDraftVO;
+import com.jeez.zp.platform.vo.RoomCategoryLinkageResponseVO;
+import com.jeez.zp.platform.vo.RoomCategoryMutationResultVO;
 import com.jeez.zp.platform.vo.RoomCategoryPageResponseVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -64,6 +72,68 @@ public class RoomCategoryController {
         );
     }
 
+    @PostMapping("/roomCategory/detail/get")
+    public HudsonResponse<RoomCategoryEditDraftVO> getEditDetail(@RequestBody RoomCategoryDetailRequest request) {
+        return HudsonResponse.success(
+                roomCategoryService.getEditDetail(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        parseLong(request.getRoomCategoryId()),
+                        request.getMode()
+                ),
+                TraceIdFactory.next("room-category-detail-get")
+        );
+    }
+
+    @PostMapping("/roomCategory/linkage/get")
+    public HudsonResponse<RoomCategoryLinkageResponseVO> getLinkage(@RequestBody RoomCategoryLinkageRequest request) {
+        return HudsonResponse.success(
+                roomCategoryService.getLinkage(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        parseLong(request.getRoomCategoryId())
+                ),
+                TraceIdFactory.next("room-category-linkage-get")
+        );
+    }
+
+    @PostMapping("/roomCategory/linkage/save")
+    public HudsonResponse<RoomCategoryMutationResultVO> saveLinkage(@RequestBody RoomCategoryLinkageRequest request) {
+        return HudsonResponse.success(
+                roomCategoryService.saveLinkage(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        parseLong(request.getRoomCategoryId()),
+                        parseLongList(request.getLinkedRoomCategoryIds())
+                ),
+                TraceIdFactory.next("room-category-linkage-save")
+        );
+    }
+
+    @PostMapping("/roomCategory/save")
+    public HudsonResponse<RoomCategoryMutationResultVO> saveRoomCategory(@RequestBody RoomCategorySaveRequest request) {
+        return HudsonResponse.success(
+                roomCategoryService.saveRoomCategory(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getForm()
+                ),
+                TraceIdFactory.next("room-category-save")
+        );
+    }
+
+    @PostMapping("/roomCategory/delete")
+    public HudsonResponse<RoomCategoryMutationResultVO> deleteRoomCategory(@RequestBody RoomCategoryDeleteRequest request) {
+        return HudsonResponse.success(
+                roomCategoryService.deleteRoomCategory(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        parseLong(request.getRoomCategoryId())
+                ),
+                TraceIdFactory.next("room-category-delete")
+        );
+    }
+
     private Long parseLong(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -88,5 +158,16 @@ public class RoomCategoryController {
             return null;
         }
         return value;
+    }
+
+    private List<Long> parseLongList(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(this::parseLong)
+                .filter(value -> value != null)
+                .toList();
     }
 }

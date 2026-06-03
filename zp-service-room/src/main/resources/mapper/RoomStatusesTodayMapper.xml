@@ -5,7 +5,7 @@
 <mapper namespace="com.jeez.zp.room.mapper.RoomStatusesTodayMapper">
 
     <select id="selectRows" resultType="com.jeez.zp.room.vo.RoomStatusesTodayRowVO">
-        WITH ranked_order AS (
+        WITH order_rows AS (
             SELECT
                 CAST(om.room_id AS CHAR) AS roomId,
                 CAST(om.order_id AS CHAR) AS orderId,
@@ -20,27 +20,14 @@
                 om.end_at AS checkOutAt,
                 om.total_price_cent AS totalPriceCent,
                 om.total_pay_price_cent AS totalPayPriceCent,
-                om.source_type AS sourceType,
-                ROW_NUMBER() OVER (
-                    PARTITION BY om.room_id
-                    ORDER BY
-                        CASE
-                            WHEN om.status = 'checked_in' THEN 1
-                            WHEN om.status = 'booked' THEN 2
-                            WHEN om.status = 'pending' THEN 3
-                            WHEN om.status = 'refunding' THEN 4
-                            ELSE 9
-                        END ASC,
-                        om.start_at ASC,
-                        om.order_id ASC
-                ) AS rowNum
+                om.source_type AS sourceType
             FROM order_main om
             LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
                 AND ca.camp_id = om.camp_id
             WHERE om.camp_id = #{campId}
               AND om.is_deleted = 0
               AND om.room_id IS NOT NULL
-              AND om.status IN ('booked', 'checked_in', 'pending', 'refunding')
+              AND om.status NOT IN ('cancelled', 'canceled')
               AND om.start_at &lt; #{nextDayStart}
               AND om.end_at &gt; #{dayStart}
         )
@@ -80,8 +67,7 @@
             AND rf.camp_id = r.camp_id
             AND rf.status = 1
             AND rf.is_deleted = 0
-        LEFT JOIN ranked_order ro ON ro.roomId = CAST(r.room_id AS CHAR)
-            AND ro.rowNum = 1
+        LEFT JOIN order_rows ro ON ro.roomId = CAST(r.room_id AS CHAR)
         WHERE r.camp_id = #{campId}
           AND r.status = 1
           AND r.is_deleted = 0
@@ -103,6 +89,21 @@
                 #{poiId}
             </foreach>
         </if>
-        ORDER BY rc.sort_no ASC, rc.room_category_id ASC, rf.sort_no ASC, rf.floor_id ASC, r.sort_no ASC, r.room_id ASC
+        ORDER BY
+            rc.sort_no ASC,
+            rc.room_category_id ASC,
+            rf.sort_no ASC,
+            rf.floor_id ASC,
+            r.sort_no ASC,
+            r.room_id ASC,
+            CASE
+                WHEN ro.orderStatus = 'checked_in' THEN 1
+                WHEN ro.orderStatus = 'booked' THEN 2
+                WHEN ro.orderStatus = 'pending' THEN 3
+                WHEN ro.orderStatus = 'refunding' THEN 4
+                ELSE 9
+            END ASC,
+            ro.checkInAt ASC,
+            ro.orderId ASC
     </select>
 </mapper>

@@ -22,4 +22,5 @@ public class WeiRoomCategoryCatalogRowVO {
     private Long effectiveEndTime;
     private String description;
     private String applyId;
+    private Integer sortNo;
 }

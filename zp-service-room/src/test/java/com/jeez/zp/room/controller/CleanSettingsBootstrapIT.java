@@ -218,6 +218,7 @@ class CleanSettingsBootstrapIT {
 
     private void seedCleanTasks() {
         resetCleanTasks();
+        RoomCleanTestCatalogFixture.ensureBaseCatalog(jdbcTemplate);
         insertCleanTask(130501L, "pending", "2026-05-18 10:00:00");
         insertCleanTask(130502L, "processing", "2026-05-18 14:30:00");
         insertCleanTask(130503L, "done", "2026-05-18 17:30:00");

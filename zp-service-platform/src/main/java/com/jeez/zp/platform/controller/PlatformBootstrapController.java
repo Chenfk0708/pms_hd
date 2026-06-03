@@ -5,6 +5,7 @@ import com.jeez.zp.platform.api.TraceIdFactory;
 import com.jeez.zp.platform.dto.request.CampIdRequest;
 import com.jeez.zp.platform.dto.request.MenuOptionJsonRequest;
 import com.jeez.zp.platform.dto.request.MenuProjectRequest;
+import com.jeez.zp.platform.dto.request.VersionSubscriptionOrderSubmitRequest;
 import com.jeez.zp.platform.security.LoginUserContext;
 import com.jeez.zp.platform.service.PlatformBootstrapService;
 import com.jeez.zp.platform.vo.CampDetailVO;
@@ -15,6 +16,7 @@ import com.jeez.zp.platform.vo.MenuOptionJsonsVO;
 import com.jeez.zp.platform.vo.MenuProjectVO;
 import com.jeez.zp.platform.vo.SystemConfigsResponseVO;
 import com.jeez.zp.platform.vo.UserOwnVO;
+import com.jeez.zp.platform.vo.VersionSubscriptionOrderSubmitVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -84,6 +86,16 @@ public class PlatformBootstrapController {
         return HudsonResponse.success(
                 platformBootstrapService.getEditionResource(parseLong(request.getCampId()), LoginUserContext.requiredUserId()),
                 TraceIdFactory.next("edition-resource-get")
+        );
+    }
+
+    @PostMapping("/version/subscription/order/submit")
+    public HudsonResponse<VersionSubscriptionOrderSubmitVO> submitVersionSubscriptionOrder(
+            @RequestBody VersionSubscriptionOrderSubmitRequest request
+    ) {
+        return HudsonResponse.success(
+                platformBootstrapService.submitVersionSubscriptionOrder(request, LoginUserContext.requiredUserId()),
+                TraceIdFactory.next("version-subscription-order-submit")
         );
     }
 

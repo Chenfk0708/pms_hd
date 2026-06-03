@@ -1,0 +1,1128 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.finance.mapper.FinanceMapper">
+
+    <select id="selectCustomChannels" resultType="com.jeez.zp.finance.vo.CustomChannelRowVO">
+        SELECT CAST(custom_channel_id AS CHAR) AS id,
+               channel_name AS name,
+               channel_code AS code,
+               color_hex AS color,
+               color_name AS colorName,
+               status,
+               DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt,
+               COALESCE(operator_name, '') AS operator,
+               COALESCE(note, '') AS note
+        FROM custom_channel
+        WHERE camp_id = #{campId}
+          AND is_deleted = 0
+        ORDER BY updated_at DESC, custom_channel_id DESC
+    </select>
+
+    <select id="selectMaxCustomChannelId" resultType="long">
+        SELECT MAX(custom_channel_id) FROM custom_channel
+    </select>
+
+    <insert id="insertCustomChannel">
+        INSERT INTO custom_channel (
+            custom_channel_id,
+            camp_id,
+            channel_name,
+            channel_code,
+            color_hex,
+            color_name,
+            status,
+            operator_name,
+            note,
+            is_deleted
+        ) VALUES (
+            #{customChannelId},
+            #{campId},
+            #{channelName},
+            #{channelCode},
+            #{colorHex},
+            #{colorName},
+            #{status},
+            #{operatorName},
+            #{note},
+            0
+        )
+    </insert>
+
+    <update id="updateCustomChannel">
+        UPDATE custom_channel
+        <set>
+            <if test="channelName != null">channel_name = #{channelName},</if>
+            <if test="colorHex != null">color_hex = #{colorHex},</if>
+            <if test="colorName != null">color_name = #{colorName},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE camp_id = #{campId}
+          AND custom_channel_id = #{customChannelId}
+          AND is_deleted = 0
+    </update>
+
+    <update id="softDeleteCustomChannel">
+        UPDATE custom_channel
+        SET is_deleted = 1
+        WHERE camp_id = #{campId}
+          AND custom_channel_id = #{customChannelId}
+          AND is_deleted = 0
+    </update>
+
+    <select id="countCustomChannelName" resultType="long">
+        SELECT COUNT(1)
+        FROM custom_channel
+        WHERE camp_id = #{campId}
+          AND channel_name = #{channelName}
+          AND is_deleted = 0
+        <if test="excludedId != null">
+            AND custom_channel_id != #{excludedId}
+        </if>
+    </select>
+
+    <select id="countCustomChannelCode" resultType="long">
+        SELECT COUNT(1)
+        FROM custom_channel
+        WHERE camp_id = #{campId}
+          AND channel_code = #{channelCode}
+          AND is_deleted = 0
+        <if test="excludedId != null">
+            AND custom_channel_id != #{excludedId}
+        </if>
+    </select>
+
+    <select id="selectCustomChannel" resultType="com.jeez.zp.finance.vo.CustomChannelRowVO">
+        SELECT CAST(custom_channel_id AS CHAR) AS id,
+               channel_name AS name,
+               channel_code AS code,
+               color_hex AS color,
+               color_name AS colorName,
+               status,
+               DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt,
+               COALESCE(operator_name, '') AS operator,
+               COALESCE(note, '') AS note
+        FROM custom_channel
+        WHERE camp_id = #{campId}
+          AND custom_channel_id = #{customChannelId}
+          AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectSystemChannelStatesConfig" resultType="string">
+        SELECT CAST(config_value AS CHAR)
+        FROM system_config
+        WHERE camp_id = #{campId}
+          AND config_scope = 'camp'
+          AND config_key = #{configKey}
+        LIMIT 1
+    </select>
+
+    <select id="selectSystemConfigId" resultType="long">
+        SELECT system_config_id
+        FROM system_config
+        WHERE camp_id = #{campId}
+          AND config_scope = 'camp'
+          AND config_key = #{configKey}
+        LIMIT 1
+    </select>
+
+    <insert id="upsertSystemChannelStatesConfig">
+        INSERT INTO system_config (
+            system_config_id,
+            camp_id,
+            config_key,
+            config_scope,
+            config_value,
+            value_type,
+            source,
+            updated_by
+        ) VALUES (
+            #{systemConfigId},
+            #{campId},
+            #{configKey},
+            'camp',
+            CAST(#{configValue} AS JSON),
+            'json',
+            'finance',
+            #{updatedBy}
+        )
+        ON DUPLICATE KEY UPDATE
+            config_value = VALUES(config_value),
+            value_type = VALUES(value_type),
+            source = VALUES(source),
+            updated_by = VALUES(updated_by)
+    </insert>
+
+    <select id="selectPaymentWays" resultType="com.jeez.zp.finance.vo.PaymentWayVO">
+        SELECT CAST(payment_way_id AS CHAR) AS paymentWayId,
+               payment_way_name AS paymentWayName,
+               payment_way_code AS paymentWayCode,
+               way_type AS wayType,
+               sort_no AS sortNo,
+               0 AS isCustom,
+               CASE WHEN status = 1 AND is_deleted = 0 THEN 1 ELSE 0 END AS isEnable
+        FROM payment_way
+        WHERE camp_id = #{campId}
+        ORDER BY sort_no, payment_way_id
+    </select>
+
+    <select id="selectPaymentTypes" resultType="com.jeez.zp.finance.vo.PaymentTypeVO">
+        SELECT CAST(payment_type_id AS CHAR) AS paymentTypeId,
+               payment_type_name AS paymentTypeName,
+               ignore_order_get_item AS ignoreOrderGetItem,
+               is_custom AS isCustom,
+               is_income AS isIncome,
+               CASE WHEN status = 1 AND is_deleted = 0 THEN 1 ELSE 0 END AS isEnable,
+               biz_type AS bizType,
+               group_type AS groupType
+        FROM payment_type
+        WHERE camp_id = #{campId}
+        ORDER BY group_type, sort_no, payment_type_id
+    </select>
+
+    <select id="selectPaymentGroups" resultType="com.jeez.zp.finance.vo.PaymentGroupVO">
+        SELECT CAST(payment_type_group_id AS CHAR) AS paymentTypeGroupId,
+               group_type AS groupType,
+               group_name AS groupTypeName
+        FROM payment_type_group
+        WHERE camp_id = #{campId}
+          AND is_deleted = 0
+        ORDER BY sort_no, group_type
+    </select>
+
+    <select id="selectPaymentGroupByType" resultType="com.jeez.zp.finance.vo.PaymentGroupVO">
+        SELECT CAST(payment_type_group_id AS CHAR) AS paymentTypeGroupId,
+               group_type AS groupType,
+               group_name AS groupTypeName
+        FROM payment_type_group
+        WHERE camp_id = #{campId}
+          AND group_type = #{groupType}
+          AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectMaxPaymentTypeId" resultType="long">
+        SELECT MAX(payment_type_id) FROM payment_type
+    </select>
+
+    <insert id="insertPaymentType">
+        INSERT INTO payment_type (
+            payment_type_id,
+            camp_id,
+            payment_type_group_id,
+            payment_type_name,
+            group_type,
+            group_name,
+            biz_type,
+            is_income,
+            is_custom,
+            ignore_order_get_item,
+            status,
+            sort_no,
+            is_deleted
+        ) VALUES (
+            #{paymentTypeId},
+            #{campId},
+            #{groupId},
+            #{paymentTypeName},
+            #{groupType},
+            #{groupName},
+            #{bizType},
+            #{isIncome},
+            1,
+            #{ignoreOrderGetItem},
+            1,
+            999,
+            0
+        )
+    </insert>
+
+    <select id="selectPaymentSettings" resultType="com.jeez.zp.finance.vo.PaymentSettingVO">
+        SELECT CAST(setting_id AS CHAR) AS settingId,
+               CAST(camp_id AS CHAR) AS campId,
+               CAST(night_audit_json AS CHAR) AS nightAudit,
+               CAST(amortize_json AS CHAR) AS amortize,
+               CAST(vendible_json AS CHAR) AS vendible,
+               DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM finance_setting
+        WHERE camp_id = #{campId}
+        ORDER BY updated_at DESC
+    </select>
+
+    <select id="selectPaymentSetting" resultType="com.jeez.zp.finance.vo.PaymentSettingVO">
+        SELECT CAST(setting_id AS CHAR) AS settingId,
+               CAST(camp_id AS CHAR) AS campId,
+               CAST(night_audit_json AS CHAR) AS nightAudit,
+               CAST(amortize_json AS CHAR) AS amortize,
+               CAST(vendible_json AS CHAR) AS vendible,
+               DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM finance_setting
+        WHERE camp_id = #{campId}
+        ORDER BY updated_at DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectPaymentWay" resultType="com.jeez.zp.finance.vo.PaymentWayVO">
+        SELECT CAST(payment_way_id AS CHAR) AS paymentWayId,
+               payment_way_name AS paymentWayName,
+               payment_way_code AS paymentWayCode,
+               way_type AS wayType,
+               sort_no AS sortNo,
+               0 AS isCustom,
+               CASE WHEN status = 1 AND is_deleted = 0 THEN 1 ELSE 0 END AS isEnable
+        FROM payment_way
+        WHERE camp_id = #{campId}
+          AND payment_way_id = #{paymentWayId}
+          AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectMaxPaymentWayId" resultType="long">
+        SELECT MAX(payment_way_id) FROM payment_way
+    </select>
+
+    <select id="selectMaxPaymentWaySortNo" resultType="int">
+        SELECT MAX(sort_no)
+        FROM payment_way
+        WHERE camp_id = #{campId}
+          AND is_deleted = 0
+    </select>
+
+    <insert id="insertPaymentWay">
+        INSERT INTO payment_way (
+            payment_way_id,
+            camp_id,
+            payment_way_name,
+            payment_way_code,
+            way_type,
+            sort_no,
+            status,
+            is_deleted
+        ) VALUES (
+            #{paymentWayId},
+            #{campId},
+            #{name},
+            #{code},
+            'custom',
+            #{sortNo},
+            #{status},
+            0
+        )
+    </insert>
+
+    <update id="updatePaymentWayStatus">
+        UPDATE payment_way
+        SET status = #{status}
+        WHERE camp_id = #{campId}
+          AND payment_way_id = #{paymentWayId}
+          AND is_deleted = 0
+    </update>
+
+    <select id="selectAdjacentPaymentWay" resultType="com.jeez.zp.finance.vo.PaymentWayVO">
+        SELECT CAST(payment_way_id AS CHAR) AS paymentWayId,
+               payment_way_name AS paymentWayName,
+               payment_way_code AS paymentWayCode,
+               way_type AS wayType,
+               sort_no AS sortNo,
+               0 AS isCustom,
+               CASE WHEN status = 1 AND is_deleted = 0 THEN 1 ELSE 0 END AS isEnable
+        FROM payment_way
+        WHERE camp_id = #{campId}
+          AND is_deleted = 0
+        <choose>
+            <when test="direction == 'up'">
+                AND sort_no &lt; #{sortNo}
+                ORDER BY sort_no DESC, payment_way_id DESC
+            </when>
+            <otherwise>
+                AND sort_no &gt; #{sortNo}
+                ORDER BY sort_no ASC, payment_way_id ASC
+            </otherwise>
+        </choose>
+        LIMIT 1
+    </select>
+
+    <update id="updatePaymentWaySortNo">
+        UPDATE payment_way
+        SET sort_no = #{sortNo}
+        WHERE camp_id = #{campId}
+          AND payment_way_id = #{paymentWayId}
+          AND is_deleted = 0
+    </update>
+
+    <sql id="ledgerWhere">
+        FROM ledger_entry le
+        LEFT JOIN payment_type pt ON pt.payment_type_id = le.payment_type_id
+            AND pt.camp_id = le.camp_id
+            AND pt.is_deleted = 0
+        LEFT JOIN payment_way pw ON pw.payment_way_id = le.payment_way_id
+            AND pw.camp_id = le.camp_id
+            AND pw.is_deleted = 0
+        LEFT JOIN order_main om ON om.order_id = le.order_id
+            AND om.camp_id = le.camp_id
+            AND om.is_deleted = 0
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+            AND rc.camp_id = le.camp_id
+            AND rc.is_deleted = 0
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = le.camp_id
+            AND r.is_deleted = 0
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = le.camp_id
+        WHERE le.camp_id = #{campId}
+        <if test="beginTime != null">AND le.occurred_at &gt;= #{beginTime}</if>
+        <if test="endTime != null">AND le.occurred_at &lt;= #{endTime}</if>
+        <if test="roomCategoryId != null">AND om.room_category_id = #{roomCategoryId}</if>
+        <if test="isIncome != null">
+            <choose>
+                <when test="isIncome == 1">AND le.entry_type = 'income'</when>
+                <otherwise>AND le.entry_type = 'expense'</otherwise>
+            </choose>
+        </if>
+    </sql>
+
+    <select id="selectLedgerRecords" resultType="com.jeez.zp.finance.vo.OrderLedgerRecordVO">
+        SELECT CAST(le.ledger_entry_id AS CHAR) AS id,
+               CAST(le.poi_id AS CHAR) AS poiId,
+               CASE WHEN le.entry_type = 'income' THEN '����' ELSE '֧��' END AS typeLabel,
+               COALESCE(le.source_type, '') AS sourceLabel,
+               COALESCE(CAST(le.order_id AS CHAR), '') AS orderId,
+               COALESCE(pt.payment_type_name, '') AS projectLabel,
+               le.amount_cent / 100.0 AS amount,
+               0.0 AS debtAmount,
+               COALESCE(pw.payment_way_name, '') AS paymentWayLabel,
+               '' AS paymentNo,
+               DATE_FORMAT(le.occurred_at, '%Y-%m-%d %H:%i:%s') AS paymentTime,
+               DATE_FORMAT(le.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+               '' AS roomLabel,
+               COALESCE(le.remark, '') AS remark,
+               COALESCE(le.operator_name, '') AS operatorName
+        <include refid="ledgerWhere" />
+        ORDER BY le.occurred_at DESC, le.ledger_entry_id DESC
+    </select>
+
+    <select id="selectLedgerEntryRows" resultType="com.jeez.zp.finance.vo.LedgerEntryRowVO">
+        SELECT CAST(le.ledger_entry_id AS CHAR) AS id,
+               COALESCE(pt.payment_type_name, '') AS accountName,
+               CASE WHEN le.entry_type = 'income' THEN 1 ELSE 0 END AS isIncome,
+               CASE WHEN le.entry_type = 'income' THEN '收入' ELSE '支出' END AS typeName,
+               le.amount_cent / 100.0 AS amount,
+               COALESCE(pw.payment_way_name, '') AS paymentWayName,
+               COALESCE(rc.name, '') AS roomCategoryName,
+               COALESCE(r.room_name, '') AS roomName,
+               COALESCE(le.remark, '') AS note,
+               COALESCE(le.operator_name, '') AS operatorName,
+               COALESCE(ca.channel_name, om.source_label_snapshot, le.source_type, '') AS channelName,
+               DATE_FORMAT(le.occurred_at, '%Y-%m-%d %H:%i:%s') AS gmtCreate
+        <include refid="ledgerWhere" />
+        ORDER BY le.occurred_at DESC, le.ledger_entry_id DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="countLedgerRecords" resultType="long">
+        SELECT COUNT(1)
+        <include refid="ledgerWhere" />
+    </select>
+
+    <select id="selectLedgerSummary" resultType="com.jeez.zp.finance.vo.OrderLedgerSummaryVO">
+        SELECT COALESCE(SUM(CASE WHEN le.entry_type = 'income' THEN le.amount_cent ELSE 0 END),0) / 100.0 AS totalIncome,
+               COALESCE(SUM(CASE WHEN le.entry_type = 'expense' THEN le.amount_cent ELSE 0 END),0) / 100.0 AS totalExpense,
+               (COALESCE(SUM(CASE WHEN le.entry_type = 'income' THEN le.amount_cent ELSE 0 END),0) - COALESCE(SUM(CASE WHEN le.entry_type = 'expense' THEN le.amount_cent ELSE 0 END),0)) / 100.0 AS netIncome
+        FROM ledger_entry le
+        LEFT JOIN order_main om ON om.order_id = le.order_id
+            AND om.camp_id = le.camp_id
+            AND om.is_deleted = 0
+        WHERE le.camp_id = #{campId}
+        <if test="beginTime != null">AND le.occurred_at &gt;= #{beginTime}</if>
+        <if test="endTime != null">AND le.occurred_at &lt;= #{endTime}</if>
+        <if test="roomCategoryId != null">AND om.room_category_id = #{roomCategoryId}</if>
+        <if test="isIncome != null">
+            <choose>
+                <when test="isIncome == 1">AND le.entry_type = 'income'</when>
+                <otherwise>AND le.entry_type = 'expense'</otherwise>
+            </choose>
+        </if>
+    </select>
+
+    <select id="selectOtaAccounts" resultType="com.jeez.zp.finance.vo.OtaAccountVO">
+        SELECT CAST(account_id AS CHAR) AS accountId,
+               CAST(channel_id AS CHAR) AS channelId,
+               channel_name AS channelName,
+               account_name AS accountName,
+               out_account_id AS outAccountId,
+               status,
+               DATE_FORMAT(authorized_at, '%Y-%m-%d %H:%i:%s') AS authorizedAt,
+               DATE_FORMAT(expired_at, '%Y-%m-%d %H:%i:%s') AS expiredAt
+        FROM channel_account
+        WHERE camp_id = #{campId}
+        ORDER BY account_id DESC
+    </select>
+
+    <select id="countOtaPois" resultType="int">
+        SELECT COUNT(1) FROM channel_poi_rel WHERE camp_id = #{campId}
+    </select>
+
+    <select id="countOtaRoomCategories" resultType="int">
+        SELECT COUNT(1) FROM channel_room_category_rel WHERE camp_id = #{campId}
+    </select>
+
+    <select id="selectOtaAccount" resultType="com.jeez.zp.finance.vo.OtaAccountVO">
+        SELECT CAST(account_id AS CHAR) AS accountId,
+               CAST(channel_id AS CHAR) AS channelId,
+               channel_name AS channelName,
+               account_name AS accountName,
+               out_account_id AS outAccountId,
+               status,
+               DATE_FORMAT(authorized_at, '%Y-%m-%d %H:%i:%s') AS authorizedAt,
+               DATE_FORMAT(expired_at, '%Y-%m-%d %H:%i:%s') AS expiredAt
+        FROM channel_account
+        WHERE camp_id = #{campId} AND account_id = #{accountId}
+        LIMIT 1
+    </select>
+
+    <select id="selectOtaPois" resultType="com.jeez.zp.finance.vo.OtaPoiRelVO">
+        SELECT CAST(cpr.id AS CHAR) AS id,
+               CAST(cpr.poi_id AS CHAR) AS poiId,
+               COALESCE(pp.poi_name, '') AS poiName,
+               cpr.out_poi_id AS outPoiId,
+               cpr.sync_status AS syncStatus
+        FROM channel_poi_rel cpr
+        LEFT JOIN pms_poi pp ON pp.poi_id = cpr.poi_id
+        WHERE cpr.camp_id = #{campId} AND cpr.account_id = #{accountId}
+        ORDER BY cpr.id
+    </select>
+
+    <select id="selectOtaRoomCategories" resultType="com.jeez.zp.finance.vo.OtaRoomCategoryRelVO">
+        SELECT CAST(crcr.id AS CHAR) AS id,
+               CAST(crcr.room_category_id AS CHAR) AS roomCategoryId,
+               COALESCE(rc.name, '') AS roomCategoryName,
+               crcr.out_room_category_id AS outRoomCategoryId,
+               crcr.project_type AS projectType,
+               crcr.shelf_status AS shelfStatus,
+               crcr.audit_status AS auditStatus
+        FROM channel_room_category_rel crcr
+        LEFT JOIN room_category rc ON rc.room_category_id = crcr.room_category_id
+        WHERE crcr.camp_id = #{campId} AND crcr.account_id = #{accountId}
+        ORDER BY crcr.id
+    </select>
+
+
+<sql id="distributionOrderFilters">
+    WHERE doo.camp_id = #{campId}
+      AND om.camp_id = #{campId}
+      AND om.is_deleted = 0
+    <if test="bookingStart != null">
+        AND om.created_at &gt;= #{bookingStart}
+    </if>
+    <if test="bookingEndExclusive != null">
+        AND om.created_at &lt; #{bookingEndExclusive}
+    </if>
+    <if test="keyword != null and keyword != ''">
+        AND (
+            om.out_order_no LIKE CONCAT('%', #{keyword}, '%')
+            OR om.order_no LIKE CONCAT('%', #{keyword}, '%')
+            OR COALESCE(om.guest_name, '') LIKE CONCAT('%', #{keyword}, '%')
+            OR COALESCE(om.guest_mobile, '') LIKE CONCAT('%', #{keyword}, '%')
+            OR COALESCE(rc.name, '') LIKE CONCAT('%', #{keyword}, '%')
+            OR COALESCE(rc.display_name, '') LIKE CONCAT('%', #{keyword}, '%')
+        )
+    </if>
+    <if test="settledState != null and settledState != ''">
+        AND doo.settlement_status = #{settledState}
+    </if>
+    <if test="breakTemp != null">
+        <choose>
+            <when test="breakTemp">
+                AND COALESCE(TRIM(om.remark), '') = '置换订单'
+            </when>
+            <otherwise>
+                AND COALESCE(TRIM(om.remark), '') != '置换订单'
+            </otherwise>
+        </choose>
+    </if>
+</sql>
+
+<select id="selectDistributionOrders" resultType="com.jeez.zp.finance.vo.DistributionOrderVO">
+    SELECT CAST(doo.distribution_order_id AS CHAR) AS distributionOrderId,
+           CAST(doo.source_order_id AS CHAR) AS sourceOrderId,
+           CAST(doo.channel_id AS CHAR) AS channelId,
+           COALESCE(om.out_order_no, om.order_no, CAST(om.order_id AS CHAR)) AS orderId,
+           COALESCE(om.guest_name, '') AS customerName,
+           COALESCE(om.guest_mobile, '') AS customerPhone,
+           CONCAT_WS('/', NULLIF(COALESCE(om.guest_name, ''), ''), NULLIF(COALESCE(om.guest_mobile, ''), '')) AS customerInfo,
+           COALESCE(NULLIF(rc.display_name, ''), rc.name, '') AS roomCategoryName,
+           DATE_FORMAT(om.created_at, '%Y-%m-%d %H:%i:%s') AS bookedTime,
+           COALESCE(om.total_pay_price_cent, 0) / 100.0 AS paidAmount,
+           COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) / 100.0 AS serviceFee,
+           CASE
+               WHEN om.settlement_amount_cent &gt; 0 THEN om.settlement_amount_cent
+               WHEN om.total_pay_price_cent &gt; 0 THEN GREATEST(
+                   om.total_pay_price_cent - COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                   0
+               )
+               ELSE GREATEST(
+                   om.total_price_cent - COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                   0
+               )
+           END / 100.0 AS settlementAmount,
+           CASE WHEN doo.settlement_status = 'settled' THEN
+               CASE
+                   WHEN om.settlement_amount_cent &gt; 0 THEN om.settlement_amount_cent
+                   WHEN om.total_pay_price_cent &gt; 0 THEN GREATEST(
+                       om.total_pay_price_cent - COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                       0
+                   )
+                   ELSE GREATEST(
+                       om.total_price_cent - COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                       0
+                   )
+               END
+           ELSE 0 END / 100.0 AS settledAmount,
+           doo.settlement_status AS settledState,
+           CASE doo.settlement_status
+                 WHEN 'settled' THEN '已结算'
+                 ELSE '待结算'
+           END AS settlementStatus,
+           CASE WHEN COALESCE(TRIM(om.remark), '') = '置换订单' THEN '置换订单' ELSE '非置换订单' END AS orderFilter,
+           COALESCE(om.total_pay_price_cent, 0) / 100.0 AS invoicePrice,
+           COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) / 100.0 AS commission,
+           CASE
+               WHEN om.settlement_amount_cent &gt; 0 THEN om.settlement_amount_cent
+               WHEN om.total_pay_price_cent &gt; 0 THEN GREATEST(
+                   om.total_pay_price_cent - COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                   0
+               )
+               ELSE GREATEST(
+                   om.total_price_cent - COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                   0
+               )
+           END / 100.0 AS incomePrice,
+           CASE WHEN doo.settlement_status = 'settled' THEN
+               CASE
+                   WHEN om.settlement_amount_cent &gt; 0 THEN om.settlement_amount_cent
+                   WHEN om.total_pay_price_cent &gt; 0 THEN GREATEST(
+                       om.total_pay_price_cent - COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                       0
+                   )
+                   ELSE GREATEST(
+                       om.total_price_cent - COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                       0
+                   )
+               END
+           ELSE 0 END / 100.0 AS settledPrice,
+           COALESCE(doo.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) / 100.0 AS commissionPrice,
+           DATE_FORMAT(doo.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt
+    FROM distribution_order doo
+    JOIN order_main om ON om.order_id = doo.source_order_id
+    LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+    <include refid="distributionOrderFilters" />
+    ORDER BY om.created_at DESC, doo.distribution_order_id DESC
+    LIMIT #{offset}, #{pageSize}
+</select>
+
+<select id="countDistributionOrders" resultType="long">
+    SELECT COUNT(1)
+    FROM distribution_order doo
+    JOIN order_main om ON om.order_id = doo.source_order_id
+    LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+    <include refid="distributionOrderFilters" />
+</select>
+
+<select id="selectCampName" resultType="string">
+    SELECT name FROM pms_camp WHERE camp_id = #{campId} AND is_deleted = 0 LIMIT 1
+</select>
+
+    <select id="selectAccountBookPaymentWayRows" resultType="com.jeez.zp.finance.vo.AccountBookPaymentWayQueryRowVO">
+        SELECT
+            DATE_FORMAT(le.biz_date, '%Y-%m-%d') AS bizDate,
+            CAST(COALESCE(le.payment_way_id, 0) AS CHAR) AS paymentWayId,
+            COALESCE(pw.payment_way_name, '未指定') AS paymentWayName,
+            COALESCE(pw.sort_no, 999999) AS sortNo,
+            COALESCE(SUM(CASE WHEN le.entry_type = 'income' THEN le.amount_cent ELSE 0 END), 0) AS incomeAmountCent,
+            COALESCE(SUM(CASE WHEN le.entry_type = 'expense' THEN le.amount_cent ELSE 0 END), 0) AS expendAmountCent
+        FROM ledger_entry le
+        LEFT JOIN payment_way pw ON pw.payment_way_id = le.payment_way_id
+            AND pw.camp_id = le.camp_id
+            AND pw.is_deleted = 0
+        WHERE le.camp_id = #{campId}
+        <if test="beginDate != null">AND le.biz_date &gt;= #{beginDate}</if>
+        <if test="endDate != null">AND le.biz_date &lt;= #{endDate}</if>
+        <if test="poiIds != null and poiIds.size > 0">
+            AND le.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        GROUP BY le.biz_date, le.payment_way_id, pw.payment_way_name, pw.sort_no
+        ORDER BY le.biz_date ASC, sortNo ASC, le.payment_way_id ASC
+    </select>
+
+    <sql id="statementOrderFilters">
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.source_type = 'mall'
+        <if test="poiIds != null and poiIds.size > 0">
+            AND om.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        <if test="bookingStart != null">
+            AND om.created_at &gt;= #{bookingStart}
+        </if>
+        <if test="bookingEndExclusive != null">
+            AND om.created_at &lt; #{bookingEndExclusive}
+        </if>
+        <if test="breakTemp != null">
+            <choose>
+                <when test="breakTemp">
+                    AND COALESCE(TRIM(om.remark), '') = '置换订单'
+                </when>
+                <otherwise>
+                    AND COALESCE(TRIM(om.remark), '') != '置换订单'
+                </otherwise>
+            </choose>
+        </if>
+    </sql>
+
+    <select id="countStatementOrders" resultType="long">
+        SELECT COUNT(1)
+        FROM order_main om
+        <include refid="statementOrderFilters"/>
+    </select>
+
+    <select id="selectStatementOrders" resultType="com.jeez.zp.finance.vo.StatementOrderQueryRowVO">
+        SELECT
+            COALESCE(om.out_order_no, om.order_no, CAST(om.order_id AS CHAR)) AS orderId,
+            COALESCE(om.out_order_no, om.order_no, CAST(om.order_id AS CHAR)) AS orderNo,
+            COALESCE(om.guest_name, '') AS customerName,
+            COALESCE(om.guest_mobile, '') AS mobile,
+            CASE
+                WHEN om.guest_mobile IS NULL OR om.guest_mobile = '' THEN om.guest_name
+                ELSE CONCAT(om.guest_name, ' / ', om.guest_mobile)
+            END AS customerInfo,
+            CASE
+                WHEN gm.goods_type = 'coupon' THEN '预售券'
+                WHEN gm.goods_type = 'package' THEN '套餐'
+                WHEN gm.goods_type = 'service' THEN '服务'
+                WHEN om.order_type = 'hourly_room' THEN '钟点房'
+                WHEN om.order_type = 'daily_room' THEN '日租房'
+                ELSE '品牌小程序'
+            END AS productType,
+            CASE
+                WHEN gm.goods_type = 'coupon' THEN '预售券'
+                WHEN gm.goods_type = 'package' THEN '套餐'
+                WHEN gm.goods_type = 'service' THEN '服务'
+                WHEN om.order_type = 'hourly_room' THEN '钟点房'
+                WHEN om.order_type = 'daily_room' THEN '日租房'
+                ELSE '品牌小程序'
+            END AS productTypeName,
+            COALESCE(gm.name, rc.name, om.order_type) AS productName,
+            DATE_FORMAT(om.created_at, '%Y-%m-%d %H:%i:%s') AS bookingTime,
+            DATE_FORMAT(om.created_at, '%Y-%m-%d %H:%i:%s') AS bookingTimeStr,
+            CASE
+                WHEN om.source_type = 'mall' THEN '品牌小程序'
+                WHEN om.source_type = 'frontdesk' THEN '前台'
+                WHEN om.source_type = 'phone' THEN '电话'
+                WHEN om.source_type = 'channel' THEN 'OTA'
+                ELSE '其他'
+            END AS channelName,
+            COALESCE(om.total_price_cent, 0) AS payableAmountCent,
+            COALESCE(om.total_pay_price_cent, 0) AS paidAmountCent,
+            COALESCE(om.discount_price_cent, 0) AS discountAmountCent,
+            COALESCE(om.refund_price_cent, 0) AS refundAmountCent,
+            COALESCE(om.payment_fee_cent, 0) AS paymentFeeCent,
+            COALESCE(om.platform_service_fee_cent, 0) AS platformServiceFeeCent,
+            COALESCE(om.distribution_commission_cent, om.commission_price_cent, 0) AS distributorCommissionCent,
+            COALESCE(pw.payment_way_name, '') AS paymentWayName,
+            COALESCE(om.settlement_amount_cent, 0) AS settlementAmountCent
+        FROM order_main om
+        LEFT JOIN goods_main gm ON gm.goods_id = om.goods_id
+            AND gm.camp_id = om.camp_id
+            AND gm.is_deleted = 0
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        LEFT JOIN payment_way pw ON pw.payment_way_id = om.payment_way_id
+            AND pw.camp_id = om.camp_id
+            AND pw.is_deleted = 0
+        <include refid="statementOrderFilters"/>
+        ORDER BY om.created_at ASC, om.order_id ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="selectSocialAccounts" resultType="com.jeez.zp.finance.vo.SocialAccountRowVO">
+        SELECT
+            CAST(ca.account_id AS CHAR) AS id,
+            ca.channel_name AS channel,
+            COALESCE(ca.out_account_id, CAST(ca.account_id AS CHAR)) AS accountId,
+            COALESCE(
+                GROUP_CONCAT(DISTINCT pp.poi_name ORDER BY pp.poi_name SEPARATOR '、'),
+                ''
+            ) AS store,
+            CASE
+                WHEN ca.status = 'authorized' THEN '已发布'
+                WHEN ca.status = 'reviewing' THEN '审核中'
+                WHEN ca.status = 'pending' THEN '审核中'
+                ELSE '待开通'
+            END AS auditStatus,
+            CASE
+                WHEN SUM(CASE WHEN crcr.id IS NOT NULL THEN 1 ELSE 0 END) > 0 THEN '房型已同步'
+                WHEN ca.status = 'authorized' THEN '房型待同步'
+                ELSE '资料待确认'
+            END AS syncStatus,
+            DATE_FORMAT(MAX(ca.updated_at), '%Y-%m-%d %H:%i') AS updatedAt
+        FROM channel_account ca
+        LEFT JOIN channel_poi_rel cpr ON cpr.account_id = ca.account_id
+            AND cpr.camp_id = ca.camp_id
+        LEFT JOIN pms_poi pp ON pp.poi_id = cpr.poi_id
+        LEFT JOIN channel_room_category_rel crcr ON crcr.account_id = ca.account_id
+            AND crcr.camp_id = ca.camp_id
+        WHERE ca.camp_id = #{campId}
+          AND (
+            ca.channel_name LIKE '%抖音%'
+            OR ca.channel_name LIKE '%小红书%'
+            OR ca.channel_name LIKE '%视频号%'
+            OR ca.channel_name LIKE '%社媒%'
+          )
+        <if test="keyword != null and keyword != ''">
+          AND (
+            ca.channel_name LIKE CONCAT('%', #{keyword}, '%')
+            OR ca.account_name LIKE CONCAT('%', #{keyword}, '%')
+            OR ca.out_account_id LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        GROUP BY ca.account_id, ca.channel_name, ca.out_account_id, ca.status
+        ORDER BY ca.updated_at DESC, ca.account_id DESC
+    </select>
+
+    <select id="selectFullMarketingCommissionRows" resultType="com.jeez.zp.finance.vo.FullMarketingCommissionRowVO">
+        SELECT
+            CAST(gm.goods_id AS CHAR) AS productId,
+            CAST(dp.distribution_product_id AS CHAR) AS promotionPlanProductId,
+            CAST(gm.camp_id AS CHAR) AS campId,
+            gm.name AS name,
+            (
+                SELECT COALESCE(m.media_url, mr.url)
+                FROM goods_room_category_rel rel
+                JOIN room_category_media m ON m.room_category_id = rel.room_category_id
+                    AND m.status = 1
+                LEFT JOIN media_resource mr ON mr.media_resource_id = m.media_resource_id
+                    AND mr.is_deleted = 0
+                WHERE rel.goods_id = gm.goods_id
+                ORDER BY CASE WHEN m.scene_type = 'cover' THEN 0 ELSE 1 END, m.sort_no ASC, m.media_id ASC
+                LIMIT 1
+            ) AS mainPhotoMediaUrl,
+            CAST(JSON_UNQUOTE(JSON_EXTRACT(dp.commission_rule_json, '$.directRatio')) AS SIGNED) AS directRatio,
+            CAST(JSON_UNQUOTE(JSON_EXTRACT(dp.commission_rule_json, '$.parentRatio')) AS SIGNED) AS parentRatio,
+            CASE
+                WHEN gm.goods_type IN ('coupon', 'presale', 'hotel_package') OR gm.room_category_type = 2 THEN 1
+                ELSE 0
+            END AS type,
+            CASE WHEN dp.status = 1 THEN 1 ELSE 0 END AS state
+        FROM distribution_product dp
+        JOIN goods_main gm ON gm.goods_id = dp.goods_id
+            AND gm.camp_id = dp.camp_id
+            AND gm.is_deleted = 0
+            AND gm.status = 'published'
+        WHERE dp.camp_id = #{campId}
+        <if test="type != null">
+            AND CASE
+                WHEN gm.goods_type IN ('coupon', 'presale', 'hotel_package') OR gm.room_category_type = 2 THEN 1
+                ELSE 0
+            END = #{type}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND gm.name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        ORDER BY dp.distribution_product_id ASC
+    </select>
+
+    <sql id="fullMarketingOrderTypeFilter">
+        <if test="type != null">
+            AND CASE
+                WHEN gm.goods_type IN ('coupon', 'presale', 'hotel_package') OR gm.room_category_type = 2 THEN 1
+                ELSE 0
+            END = #{type}
+        </if>
+    </sql>
+
+    <sql id="fullMarketingDateFilter">
+        <if test="startDate != null and startDate != ''">AND doo.created_at &gt;= CONCAT(#{startDate}, ' 00:00:00')</if>
+        <if test="endDate != null and endDate != ''">AND doo.created_at &lt; CONCAT(#{endDate}, ' 00:00:00')</if>
+    </sql>
+
+    <select id="selectFullMarketingMetric" resultType="com.jeez.zp.finance.vo.FullMarketingMetricVO">
+        SELECT
+            COALESCE(SUM(om.total_pay_price_cent), 0) / 100.0 AS turnover,
+            COALESCE(SUM(doo.commission_price_cent), 0) / 100.0 AS commission,
+            COUNT(DISTINCT doo.distribution_order_id) AS orderCount
+        FROM distribution_order doo
+        JOIN order_main om ON om.order_id = doo.source_order_id
+            AND om.camp_id = doo.camp_id
+            AND om.is_deleted = 0
+        LEFT JOIN goods_main gm ON gm.goods_id = om.goods_id
+            AND gm.is_deleted = 0
+        WHERE doo.camp_id = #{campId}
+        <include refid="fullMarketingDateFilter" />
+        <include refid="fullMarketingOrderTypeFilter" />
+    </select>
+
+    <select id="selectFullMarketingProductSaleRows" resultType="com.jeez.zp.finance.vo.FullMarketingProductSaleRowVO">
+        SELECT
+            CAST(gm.goods_id AS CHAR) AS id,
+            CAST(gm.goods_id AS CHAR) AS productId,
+            gm.name AS name,
+            COUNT(DISTINCT doo.distribution_order_id) AS sales,
+            COALESCE(SUM(om.total_pay_price_cent), 0) / 100.0 AS turnover,
+            COALESCE(SUM(om.total_pay_price_cent), 0) / 100.0 AS amount,
+            COALESCE(SUM(doo.commission_price_cent), 0) / 100.0 AS commission
+        FROM distribution_order doo
+        JOIN order_main om ON om.order_id = doo.source_order_id
+            AND om.camp_id = doo.camp_id
+            AND om.is_deleted = 0
+        JOIN goods_main gm ON gm.goods_id = om.goods_id
+            AND gm.is_deleted = 0
+        WHERE doo.camp_id = #{campId}
+        <include refid="fullMarketingDateFilter" />
+        <include refid="fullMarketingOrderTypeFilter" />
+        GROUP BY gm.goods_id, gm.name
+        ORDER BY turnover DESC, gm.goods_id ASC
+    </select>
+
+    <select id="countChannelRoomCategories" resultType="int">
+        SELECT COUNT(DISTINCT crcr.room_category_id)
+        FROM channel_room_category_rel crcr
+        JOIN channel_account ca ON ca.account_id = crcr.account_id
+        WHERE crcr.camp_id = #{campId}
+          AND ca.channel_id = #{channelId}
+    </select>
+
+    <select id="countLinkedChannelRoomCategories" resultType="int">
+        SELECT COUNT(DISTINCT crcr.room_category_id)
+        FROM channel_room_category_rel crcr
+        JOIN channel_account ca ON ca.account_id = crcr.account_id
+        WHERE crcr.camp_id = #{campId}
+          AND ca.channel_id = #{channelId}
+          AND crcr.audit_status = 'approved'
+          AND crcr.shelf_status = 'on_shelf'
+    </select>
+
+    <select id="countOrdersByChannelAndBizDate" resultType="int">
+        SELECT COUNT(1)
+        FROM order_main om
+        WHERE om.camp_id = #{campId}
+          AND om.channel_id = #{channelId}
+          AND om.is_deleted = 0
+        <if test="bizDate != null and bizDate != ''">
+          AND DATE(om.created_at) = #{bizDate}
+        </if>
+    </select>
+
+    <select id="selectShiftWorkConfigs" resultType="com.jeez.zp.finance.vo.ShiftWorkConfigRowVO">
+        SELECT
+            CAST(swc.shift_config_id AS CHAR) AS id,
+            swc.name AS name,
+            DATE_FORMAT(swc.start_time, '%H:%i') AS startTime,
+            DATE_FORMAT(swc.end_time, '%H:%i') AS endTime,
+            CAST(swc.member_ids_json AS CHAR) AS memberIdsJson,
+            COALESCE(
+                GROUP_CONCAT(pm.name ORDER BY member_ids.ordinality SEPARATOR '、'),
+                ''
+            ) AS memberNamesText,
+            DATE_FORMAT(swc.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM shift_work_config swc
+        LEFT JOIN JSON_TABLE(
+            COALESCE(swc.member_ids_json, JSON_ARRAY()),
+            '$[*]' COLUMNS (
+                ordinality FOR ORDINALITY,
+                member_user_id BIGINT PATH '$'
+            )
+        ) member_ids ON TRUE
+        LEFT JOIN pms_member pm
+               ON pm.camp_id = swc.camp_id
+              AND pm.is_deleted = 0
+              AND pm.status = 1
+              AND COALESCE(pm.user_id, pm.member_id) = member_ids.member_user_id
+        WHERE swc.camp_id = #{campId}
+          AND swc.status = 1
+        GROUP BY swc.shift_config_id, swc.name, swc.start_time, swc.end_time, swc.member_ids_json, swc.updated_at
+        ORDER BY swc.start_time ASC, swc.shift_config_id ASC
+    </select>
+
+    <select id="selectShiftWorkGoods" resultType="com.jeez.zp.finance.vo.ShiftWorkGoodsVO">
+        SELECT
+            CAST(shift_goods_id AS CHAR) AS id,
+            CAST(shift_goods_id AS CHAR) AS shiftWorkGoodsId,
+            name AS goodsName,
+            name AS name,
+            DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM shift_work_goods
+        WHERE camp_id = #{campId}
+          AND status = 1
+        ORDER BY sort_no ASC, shift_goods_id ASC
+    </select>
+
+    <select id="selectMaxShiftWorkConfigId" resultType="long">
+        SELECT MAX(shift_config_id) FROM shift_work_config
+    </select>
+
+    <select id="selectMaxShiftWorkGoodsId" resultType="long">
+        SELECT MAX(shift_goods_id) FROM shift_work_goods
+    </select>
+
+    <update id="disableMissingShiftWorkConfigs">
+        UPDATE shift_work_config
+        SET status = 0
+        WHERE camp_id = #{campId}
+          AND status = 1
+        <choose>
+            <when test="ids != null and ids.size() &gt; 0">
+                AND shift_config_id NOT IN
+                <foreach collection="ids" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+            </when>
+            <otherwise>
+                AND 1 = 1
+            </otherwise>
+        </choose>
+    </update>
+
+    <update id="disableMissingShiftWorkGoods">
+        UPDATE shift_work_goods
+        SET status = 0
+        WHERE camp_id = #{campId}
+          AND status = 1
+        <choose>
+            <when test="ids != null and ids.size() &gt; 0">
+                AND shift_goods_id NOT IN
+                <foreach collection="ids" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+            </when>
+            <otherwise>
+                AND 1 = 1
+            </otherwise>
+        </choose>
+    </update>
+
+    <insert id="upsertShiftWorkConfig">
+        INSERT INTO shift_work_config (
+            shift_config_id,
+            camp_id,
+            name,
+            start_time,
+            end_time,
+            member_ids_json,
+            status
+        ) VALUES (
+            #{shiftConfigId},
+            #{campId},
+            #{name},
+            #{startTime},
+            #{endTime},
+            CAST(#{memberIdsJson} AS JSON),
+            1
+        )
+        ON DUPLICATE KEY UPDATE
+            name = VALUES(name),
+            start_time = VALUES(start_time),
+            end_time = VALUES(end_time),
+            member_ids_json = VALUES(member_ids_json),
+            status = 1
+    </insert>
+
+    <insert id="upsertShiftWorkGoods">
+        INSERT INTO shift_work_goods (
+            shift_goods_id,
+            camp_id,
+            name,
+            sort_no,
+            status
+        ) VALUES (
+            #{shiftGoodsId},
+            #{campId},
+            #{name},
+            #{sortNo},
+            1
+        )
+        ON DUPLICATE KEY UPDATE
+            name = VALUES(name),
+            sort_no = VALUES(sort_no),
+            status = 1
+    </insert>
+
+    <select id="countActiveShiftWorkConfigByName" resultType="long">
+        SELECT COUNT(1)
+        FROM shift_work_config
+        WHERE camp_id = #{campId}
+          AND name = #{name}
+          AND status = 1
+        <if test="excludedId != null">
+          AND shift_config_id != #{excludedId}
+        </if>
+    </select>
+
+    <select id="countActiveShiftWorkGoodsByName" resultType="long">
+        SELECT COUNT(1)
+        FROM shift_work_goods
+        WHERE camp_id = #{campId}
+          AND name = #{name}
+          AND status = 1
+        <if test="excludedId != null">
+          AND shift_goods_id != #{excludedId}
+        </if>
+    </select>
+
+    <select id="countActiveCampMemberByUserId" resultType="long">
+        SELECT COUNT(1)
+        FROM pms_member
+        WHERE camp_id = #{campId}
+          AND is_deleted = 0
+          AND status = 1
+          AND COALESCE(user_id, member_id) = #{userId}
+    </select>
+
+    <select id="selectShiftWorkReports" resultType="com.jeez.zp.finance.vo.ShiftWorkReportRowVO">
+        SELECT
+            CAST(sr.shift_record_id AS CHAR) AS id,
+            CAST(sr.shift_record_id AS CHAR) AS shiftRecordId,
+            DATE_FORMAT(sr.created_at, '%Y-%m-%d') AS workDate,
+            DATE_FORMAT(sr.created_at, '%Y-%m-%d') AS handoverDate,
+            swc.name AS shiftName,
+            swc.name AS workName,
+            CAST(COALESCE(handover.user_id, handover.member_id) AS CHAR) AS handoverUserId,
+            handover.name AS handoverUserName,
+            handover.name AS workUserName,
+            DATE_FORMAT(sr.created_at, '%Y-%m-%d %H:%i:%s') AS handoverTime,
+            DATE_FORMAT(sr.created_at, '%Y-%m-%d %H:%i:%s') AS workTime,
+            CAST(COALESCE(successor.user_id, successor.member_id) AS CHAR) AS receiverUserId,
+            successor.name AS receiverUserName,
+            successor.name AS successorUserName,
+            DATE_FORMAT(sr.created_at, '%Y-%m-%d %H:%i:%s') AS receiverTime,
+            DATE_FORMAT(sr.created_at, '%Y-%m-%d %H:%i:%s') AS successorTime,
+            1 AS workStatus,
+            '已完成' AS statusName,
+            COALESCE(JSON_UNQUOTE(JSON_EXTRACT(sr.summary_json, '$.remark')), '') AS handoverRemark,
+            '' AS receiverRemark,
+            DATE_FORMAT(sr.created_at, '%Y-%m-%d %H:%i:%s') AS systemGeneratedAt,
+            DATE_FORMAT(sr.created_at, '%Y-%m-%d %H:%i:%s') AS createTime,
+            '' AS poiId,
+            '' AS storeId,
+            '' AS poiName,
+            '' AS storeName,
+            CAST(sr.summary_json AS CHAR) AS workReport,
+            COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(sr.summary_json, '$.generalIncome')) AS DECIMAL(12,2)), 0) AS cashAmount,
+            COALESCE(JSON_LENGTH(JSON_EXTRACT(sr.summary_json, '$.workGoods')), 0) AS roomCardCount,
+            '已生成' AS nightAuditStatus
+        FROM shift_record sr
+        JOIN shift_work_config swc ON swc.shift_config_id = sr.shift_config_id
+        JOIN pms_member handover ON handover.member_id = sr.handover_member_id
+        JOIN pms_member successor ON successor.member_id = sr.successor_member_id
+        WHERE sr.camp_id = #{campId}
+        <if test="startDate != null and startDate != ''">AND DATE(sr.created_at) &gt;= #{startDate}</if>
+        <if test="endDate != null and endDate != ''">AND DATE(sr.created_at) &lt;= #{endDate}</if>
+        <if test="handoverUserId != null">AND COALESCE(handover.user_id, handover.member_id) = #{handoverUserId}</if>
+        <if test="receiverUserId != null">AND COALESCE(successor.user_id, successor.member_id) = #{receiverUserId}</if>
+        ORDER BY sr.created_at DESC, sr.shift_record_id DESC
+    </select>
+</mapper>

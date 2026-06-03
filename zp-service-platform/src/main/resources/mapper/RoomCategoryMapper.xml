@@ -66,10 +66,34 @@
             rc.weekday_price_cent AS basePrice,
             rc.weekend_price_cent AS weekendPrice,
             rc.holiday_price_cent AS holidayPrice,
+            rc.location_mode AS locationMode,
+            rc.location_province_code AS locationProvinceCode,
+            rc.location_province_name AS locationProvinceName,
+            rc.location_city_code AS locationCityCode,
+            rc.location_city_name AS locationCityName,
+            rc.location_district_code AS locationDistrictCode,
+            rc.location_district_name AS locationDistrictName,
+            rc.street_address AS streetAddress,
+            rc.community_name AS communityName,
+            rc.building_unit AS buildingUnit,
+            rc.door_number AS doorNumber,
+            rc.location_latitude AS locationLatitude,
+            rc.location_longitude AS locationLongitude,
+            rc.rental_type AS rentalType,
+            rc.property_type AS propertyType,
+            rc.suite_area AS suiteArea,
+            rc.bedroom_count AS bedroomCount,
+            rc.living_room_count AS livingRoomCount,
+            rc.kitchen_count AS kitchenCount,
+            rc.bathroom_count AS bathroomCount,
+            rc.bathroom_type AS bathroomType,
             rc.earliest_check_in_hour AS earliestCheckInTime,
             rc.latest_check_in_hour AS latestCheckInTime,
             rc.latest_check_out_hour AS latestCheckOutTime,
             rc.display_name AS displayName,
+            rc.selected_facility_ids AS selectedFacilityIds,
+            rc.bed_sheet_change_policy AS bedSheetChangePolicy,
+            rc.decoration_style AS decorationStyle,
             rc.highlight_description AS highlightDescription,
             rc.nearby_description AS nearbyDescription,
             rc.article_description AS articleDescription,
@@ -183,4 +207,429 @@
           AND rel.room_category_id = #{roomCategoryId}
         ORDER BY ca.account_id ASC
     </select>
+
+    <select id="selectEditDetail" resultType="com.jeez.zp.platform.vo.RoomCategoryPageItemVO">
+        SELECT
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            CAST(rc.room_category_id AS CHAR) AS id,
+            CAST(rc.camp_id AS CHAR) AS campId,
+            CAST(rc.poi_id AS CHAR) AS poiId,
+            p.poi_name AS poiName,
+            CAST(rc.group_id AS CHAR) AS roomCategoryGroupId,
+            g.group_name AS roomCategoryGroupName,
+            rc.name AS roomCategoryName,
+            COALESCE(rc.display_name, rc.name) AS name,
+            COALESCE(rc.room_count, 0) AS roomNum,
+            (
+                SELECT GROUP_CONCAT(r.room_name ORDER BY r.sort_no ASC, r.room_id ASC SEPARATOR ',')
+                FROM room r
+                WHERE r.room_category_id = rc.room_category_id
+                  AND r.status = 1
+                  AND r.is_deleted = 0
+            ) AS roomNames,
+            rc.weekday_price_cent AS basePrice,
+            rc.weekend_price_cent AS weekendPrice,
+            rc.holiday_price_cent AS holidayPrice,
+            rc.location_mode AS locationMode,
+            rc.location_province_code AS locationProvinceCode,
+            rc.location_province_name AS locationProvinceName,
+            rc.location_city_code AS locationCityCode,
+            rc.location_city_name AS locationCityName,
+            rc.location_district_code AS locationDistrictCode,
+            rc.location_district_name AS locationDistrictName,
+            rc.street_address AS streetAddress,
+            rc.community_name AS communityName,
+            rc.building_unit AS buildingUnit,
+            rc.door_number AS doorNumber,
+            rc.location_latitude AS locationLatitude,
+            rc.location_longitude AS locationLongitude,
+            rc.rental_type AS rentalType,
+            rc.property_type AS propertyType,
+            rc.suite_area AS suiteArea,
+            rc.bedroom_count AS bedroomCount,
+            rc.living_room_count AS livingRoomCount,
+            rc.kitchen_count AS kitchenCount,
+            rc.bathroom_count AS bathroomCount,
+            rc.bathroom_type AS bathroomType,
+            rc.earliest_check_in_hour AS earliestCheckInTime,
+            rc.latest_check_in_hour AS latestCheckInTime,
+            rc.latest_check_out_hour AS latestCheckOutTime,
+            rc.display_name AS displayName,
+            rc.selected_facility_ids AS selectedFacilityIds,
+            rc.bed_sheet_change_policy AS bedSheetChangePolicy,
+            rc.decoration_style AS decorationStyle,
+            rc.highlight_description AS highlightDescription,
+            rc.nearby_description AS nearbyDescription,
+            rc.article_description AS articleDescription,
+            rc.guest_count AS checkinGuestCount
+        FROM room_category rc
+        LEFT JOIN pms_poi p ON p.poi_id = rc.poi_id
+            AND p.is_deleted = 0
+            AND p.status = 1
+        LEFT JOIN room_category_group g ON g.group_id = rc.group_id
+            AND g.is_deleted = 0
+            AND g.status = 1
+        WHERE rc.camp_id = #{campId}
+          AND rc.room_category_id = #{roomCategoryId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectLinkageCandidates" resultType="com.jeez.zp.platform.vo.RoomCategoryPageItemVO">
+        SELECT
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            CAST(rc.room_category_id AS CHAR) AS id,
+            rc.name AS roomCategoryName,
+            COALESCE(rc.display_name, rc.name) AS name
+        FROM room_category rc
+        WHERE rc.camp_id = #{campId}
+          AND rc.room_category_id != #{roomCategoryId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC
+    </select>
+
+    <select id="selectLinkedRoomCategoryIds" resultType="long">
+        SELECT linked_room_category_id
+        FROM room_category_linkage
+        WHERE camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND status = 1
+        ORDER BY linked_room_category_id ASC
+    </select>
+
+    <select id="selectPhotos" resultType="com.jeez.zp.platform.vo.RoomCategoryPhotoVO">
+        SELECT
+            CAST(m.media_resource_id AS CHAR) AS id,
+            CAST(m.media_resource_id AS CHAR) AS mediaResourceId,
+            CAST(m.media_id AS CHAR) AS mediaId,
+            m.scene_type AS sectionKey,
+            COALESCE(mr.name, CONCAT('照片', m.sort_no)) AS name,
+            COALESCE(m.media_url, mr.url) AS url,
+            COALESCE(mr.size_bytes, 0) AS size,
+            CASE
+                WHEN mr.format = 'jpg' OR mr.format = 'jpeg' THEN 'image/jpeg'
+                WHEN mr.format = 'png' THEN 'image/png'
+                WHEN mr.format IS NOT NULL AND mr.format != '' THEN CONCAT('image/', mr.format)
+                ELSE 'image/*'
+            END AS mimeType,
+            m.sort_no AS sortOrder
+        FROM room_category_media m
+        LEFT JOIN media_resource mr ON mr.media_resource_id = m.media_resource_id
+            AND mr.is_deleted = 0
+        WHERE m.camp_id = #{campId}
+          AND m.room_category_id = #{roomCategoryId}
+          AND m.media_type = 'image'
+          AND m.status = 1
+        ORDER BY
+            CASE WHEN m.scene_type = 'cover' THEN 0 ELSE 1 END,
+            m.scene_type ASC,
+            m.sort_no ASC,
+            m.media_id ASC
+    </select>
+
+    <select id="selectExistingActiveRoomNames" resultType="string">
+        SELECT r.room_name
+        FROM room r
+        WHERE r.camp_id = #{campId}
+          AND r.poi_id = #{poiId}
+          AND r.room_category_id != #{roomCategoryId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+          AND r.room_name IN
+          <foreach collection="roomNames" item="roomName" open="(" separator="," close=")">
+              #{roomName}
+          </foreach>
+        ORDER BY r.sort_no ASC, r.room_id ASC
+    </select>
+
+    <update id="disableLinkages">
+        UPDATE room_category_linkage
+        SET status = 0,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND status = 1
+    </update>
+
+    <update id="disableRoomCategoryMedia">
+        UPDATE room_category_media
+        SET status = 0,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND status = 1
+    </update>
+
+    <select id="countMediaResource" resultType="int">
+        SELECT COUNT(1)
+        FROM media_resource
+        WHERE camp_id = #{campId}
+          AND media_resource_id = #{mediaResourceId}
+          AND is_deleted = 0
+    </select>
+
+    <select id="selectMediaResourceIdByUrl" resultType="long">
+        SELECT media_resource_id
+        FROM media_resource
+        WHERE camp_id = #{campId}
+          AND url = #{url}
+          AND is_deleted = 0
+        ORDER BY media_resource_id DESC
+        LIMIT 1
+    </select>
+
+    <insert id="insertLinkage">
+        INSERT INTO room_category_linkage (
+            id,
+            camp_id,
+            room_category_id,
+            linked_room_category_id,
+            relation_type,
+            status
+        ) VALUES (
+            #{id},
+            #{campId},
+            #{roomCategoryId},
+            #{linkedRoomCategoryId},
+            'close_linkage',
+            1
+        )
+        ON DUPLICATE KEY UPDATE
+            status = 1,
+            updated_at = CURRENT_TIMESTAMP
+    </insert>
+
+    <insert id="insertRoomCategoryMedia">
+        INSERT INTO room_category_media (
+            media_id,
+            camp_id,
+            room_category_id,
+            media_resource_id,
+            media_type,
+            media_url,
+            scene_type,
+            sort_no,
+            status
+        ) VALUES (
+            #{mediaId},
+            #{campId},
+            #{roomCategoryId},
+            #{mediaResourceId},
+            'image',
+            #{mediaUrl},
+            #{sceneType},
+            #{sortNo},
+            1
+        )
+    </insert>
+
+    <insert id="insertRoomCategory">
+        INSERT INTO room_category (
+            room_category_id,
+            camp_id,
+            poi_id,
+            group_id,
+            name,
+            display_name,
+            room_count,
+            rental_type,
+            property_type,
+            guest_count,
+            suite_area,
+            bedroom_count,
+            living_room_count,
+            kitchen_count,
+            bathroom_count,
+            bathroom_type,
+            weekday_price_cent,
+            weekend_price_cent,
+            holiday_price_cent,
+            location_mode,
+            location_province_code,
+            location_province_name,
+            location_city_code,
+            location_city_name,
+            location_district_code,
+            location_district_name,
+            street_address,
+            community_name,
+            building_unit,
+            door_number,
+            location_latitude,
+            location_longitude,
+            earliest_check_in_hour,
+            latest_check_in_hour,
+            latest_check_out_hour,
+            selected_facility_ids,
+            bed_sheet_change_policy,
+            decoration_style,
+            highlight_description,
+            nearby_description,
+            article_description,
+            status,
+            is_deleted,
+            created_by,
+            updated_by
+        ) VALUES (
+            #{roomCategoryId},
+            #{campId},
+            #{poiId},
+            #{groupId},
+            #{name},
+            #{displayName},
+            #{roomCount},
+            #{rentalType},
+            #{propertyType},
+            #{guestCount},
+            #{suiteArea},
+            #{bedroomCount},
+            #{livingRoomCount},
+            #{kitchenCount},
+            #{bathroomCount},
+            #{bathroomType},
+            #{weekdayPriceCent},
+            #{weekendPriceCent},
+            #{holidayPriceCent},
+            #{locationMode},
+            #{locationProvinceCode},
+            #{locationProvinceName},
+            #{locationCityCode},
+            #{locationCityName},
+            #{locationDistrictCode},
+            #{locationDistrictName},
+            #{streetAddress},
+            #{communityName},
+            #{buildingUnit},
+            #{doorNumber},
+            #{locationLatitude},
+            #{locationLongitude},
+            #{earliestCheckInHour},
+            #{latestCheckInHour},
+            #{latestCheckOutHour},
+            #{selectedFacilityIds},
+            #{bedSheetChangePolicy},
+            #{decorationStyle},
+            #{highlightDescription},
+            #{nearbyDescription},
+            #{articleDescription},
+            1,
+            0,
+            #{userId},
+            #{userId}
+        )
+    </insert>
+
+    <update id="updateRoomCategory">
+        UPDATE room_category
+        SET poi_id = #{poiId},
+            group_id = #{groupId},
+            name = #{name},
+            display_name = #{displayName},
+            room_count = #{roomCount},
+            rental_type = #{rentalType},
+            property_type = #{propertyType},
+            guest_count = #{guestCount},
+            suite_area = #{suiteArea},
+            bedroom_count = #{bedroomCount},
+            living_room_count = #{livingRoomCount},
+            kitchen_count = #{kitchenCount},
+            bathroom_count = #{bathroomCount},
+            bathroom_type = #{bathroomType},
+            weekday_price_cent = #{weekdayPriceCent},
+            weekend_price_cent = #{weekendPriceCent},
+            holiday_price_cent = #{holidayPriceCent},
+            location_mode = #{locationMode},
+            location_province_code = #{locationProvinceCode},
+            location_province_name = #{locationProvinceName},
+            location_city_code = #{locationCityCode},
+            location_city_name = #{locationCityName},
+            location_district_code = #{locationDistrictCode},
+            location_district_name = #{locationDistrictName},
+            street_address = #{streetAddress},
+            community_name = #{communityName},
+            building_unit = #{buildingUnit},
+            door_number = #{doorNumber},
+            location_latitude = #{locationLatitude},
+            location_longitude = #{locationLongitude},
+            earliest_check_in_hour = #{earliestCheckInHour},
+            latest_check_in_hour = #{latestCheckInHour},
+            latest_check_out_hour = #{latestCheckOutHour},
+            selected_facility_ids = #{selectedFacilityIds},
+            bed_sheet_change_policy = #{bedSheetChangePolicy},
+            decoration_style = #{decorationStyle},
+            highlight_description = #{highlightDescription},
+            nearby_description = #{nearbyDescription},
+            article_description = #{articleDescription},
+            updated_by = #{userId},
+            updated_at = CURRENT_TIMESTAMP,
+            version_no = version_no + 1
+        WHERE camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND is_deleted = 0
+    </update>
+
+    <update id="deleteRoomsByCategory">
+        UPDATE room
+        SET status = 0,
+            is_deleted = 1,
+            room_name = CONCAT('deleted-', room_id),
+            room_no = CONCAT('deleted-', room_id),
+            updated_by = #{userId},
+            updated_at = CURRENT_TIMESTAMP,
+            version_no = version_no + 1
+        WHERE camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND is_deleted = 0
+    </update>
+
+    <delete id="deleteCleanTasksByCategory">
+        DELETE FROM clean_task
+        WHERE camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND task_status IN ('pending', 'assigned')
+    </delete>
+
+    <update id="deleteRoomCategory">
+        UPDATE room_category
+        SET status = 0,
+            is_deleted = 1,
+            updated_by = #{userId},
+            updated_at = CURRENT_TIMESTAMP,
+            version_no = version_no + 1
+        WHERE camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND is_deleted = 0
+    </update>
+
+    <insert id="insertRoom">
+        INSERT INTO room (
+            room_id,
+            camp_id,
+            poi_id,
+            room_category_id,
+            room_name,
+            room_no,
+            lock_status,
+            status,
+            sort_no,
+            created_by,
+            updated_by,
+            is_deleted
+        ) VALUES (
+            #{roomId},
+            #{campId},
+            #{poiId},
+            #{roomCategoryId},
+            #{roomName},
+            #{roomName},
+            'unbound',
+            1,
+            #{sortNo},
+            #{userId},
+            #{userId},
+            0
+        )
+    </insert>
 </mapper>

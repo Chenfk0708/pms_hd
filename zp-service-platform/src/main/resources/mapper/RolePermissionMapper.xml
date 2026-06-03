@@ -82,4 +82,20 @@
           AND ad.status = 1
         ORDER BY ad.seq_no ASC, ad.authority_id ASC
     </select>
+
+    <select id="selectCampEmployees" resultType="com.jeez.zp.platform.vo.CampEmployeeOptionVO">
+        SELECT
+            CAST(COALESCE(m.user_id, m.member_id) AS CHAR) AS userId,
+            CAST(m.member_id AS CHAR) AS memberId,
+            CAST(m.role_id AS CHAR) AS roleId,
+            m.name AS displayName,
+            m.name AS userName,
+            m.name AS name,
+            COALESCE(m.mobile, '') AS mobile
+        FROM pms_member m
+        WHERE m.camp_id = #{campId}
+          AND m.is_deleted = 0
+          AND m.status = 1
+        ORDER BY m.member_id ASC
+    </select>
 </mapper>

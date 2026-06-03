@@ -77,6 +77,37 @@ class RoomCategoryStatusQueryIT {
 
     @Test
     @Timeout(60)
+    void roomCategoryStatusesCentralGet_shouldIncludeRoomCategoriesWithoutChannelBinding() throws Exception {
+        seedRoomCategoryStatuses();
+        insertRoomCategory(126003L, "TDD\u65b0\u589e\u65e0\u6e20\u9053\u7ed1\u5b9a\u623f\u578b", 30, 1, 28800);
+
+        mockMvc.perform(post("/roomCategoryStatuses/central/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "channelIds":null,
+                                  "date":"2026-05-18",
+                                  "days":3,
+                                  "pageNum":1,
+                                  "pageSize":10
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.pageX.total").value(3))
+                .andExpect(jsonPath("$.data.roomStatusViews[2].roomCategoryId").value("126003"))
+                .andExpect(jsonPath("$.data.roomStatusViews[2].roomCategoryName").value("TDD\u65b0\u589e\u65e0\u6e20\u9053\u7ed1\u5b9a\u623f\u578b"))
+                .andExpect(jsonPath("$.data.roomStatusViews[2].normalPrice").value(28800))
+                .andExpect(jsonPath("$.data.roomStatusViews[2].normalActualSalePrice").value(28800))
+                .andExpect(jsonPath("$.data.roomStatusViews[2].statusViews.length()").value(3))
+                .andExpect(jsonPath("$.data.roomStatusViews[2].channelRoomCategoryStatuses.length()").value(0));
+    }
+
+    @Test
+    @Timeout(60)
     void roomCategoryStatusesRoomCategoryChannelGet_shouldReturnChannelRpRowsUsedByCurrentFrontend() throws Exception {
         seedRoomCategoryStatuses();
 

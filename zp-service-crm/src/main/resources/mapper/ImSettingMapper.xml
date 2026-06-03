@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.crm.mapper.ImSettingMapper">
+
+    <select id="selectPhraseGroups" resultType="com.jeez.zp.crm.vo.ImWordsGroupRowVO">
+        SELECT
+            CAST(im_phrase_group_id AS CHAR) AS imWordsGroupId,
+            group_name AS name,
+            CAST(parent_group_id AS CHAR) AS parentGroupId,
+            sort_no AS sortNo
+        FROM im_phrase_group
+        WHERE camp_id = #{campId}
+          AND status = 1
+        ORDER BY COALESCE(parent_group_id, 0) ASC, sort_no ASC, im_phrase_group_id ASC
+    </select>
+
+    <select id="selectPhrases" resultType="com.jeez.zp.crm.vo.ImWordsRowVO">
+        SELECT
+            CAST(p.im_phrase_id AS CHAR) AS imWordsId,
+            p.title AS title,
+            p.content AS content,
+            g.group_name AS groupName,
+            CAST(p.im_phrase_group_id AS CHAR) AS imWordsGroupId,
+            DATE_FORMAT(p.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM im_phrase p
+        JOIN im_phrase_group g ON g.im_phrase_group_id = p.im_phrase_group_id
+            AND g.camp_id = p.camp_id
+            AND g.status = 1
+        WHERE p.camp_id = #{campId}
+          AND p.status = 1
+        <if test="groupId != null">
+          AND p.im_phrase_group_id = #{groupId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND (
+              p.title LIKE CONCAT('%', #{keyword}, '%')
+              OR p.content LIKE CONCAT('%', #{keyword}, '%')
+              OR g.group_name LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        ORDER BY p.sort_no ASC, p.im_phrase_id DESC
+    </select>
+
+    <select id="selectCampConfigValue" resultType="java.lang.String">
+        SELECT CAST(config_value AS CHAR)
+        FROM system_config
+        WHERE camp_id = #{campId}
+          AND config_scope = 'camp'
+          AND config_key = #{configKey}
+        ORDER BY system_config_id DESC
+        LIMIT 1
+    </select>
+</mapper>

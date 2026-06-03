@@ -43,18 +43,26 @@ spring:
             - Path=/jeez-fitness/**
           filters:
             - StripPrefix=0
-        - id: platform-service
-          uri: ${jeez.gateway.services.platform}
-          predicates:
-            - Path=/auth/**,/user/**,/camps/**,/camp/**,/menus/**,/menu/**,/systemConfigs/**,/systemConfig/**,/channels/**,/edition/**,/role/**,/roleAuthority/**,/paymentWays/**,/paymentTypes/**,/paymentSettings/**,/orderLedger/**,/ota/**,/distribution/**,/smsAccount/**,/smsTemplateMsgConfig/**,/roomCategories/**,/weiRoomCategories/**,/select/**
         - id: room-service
           uri: ${jeez.gateway.services.room}
           predicates:
-            - Path=/room-service/**,/roomCategoryGroups/**,/rooms/**,/roomCategories/page/get,/roomStatusesToday/**,/report/dailyRoomStatus/get,/report/forwardRoomStatus/get,/roomCategoryStatuses/central/get,/roomCategoryStatuses/roomCategory/channel/get,/cleanTask/page/get,/cleaner/list/get,/cleanSettings/bootstrap
+            - Path=/room-service/**,/roomCategoryGroups/**,/rooms/**,/roomType/**,/roomCategories/page/get,/roomCategory/photo/upload,/roomStatusesToday/**,/roomStatuses/**,/report/dailyRoomStatus/get,/report/forwardRoomStatus/get,/roomCategoryStatuses/central/get,/roomCategoryStatuses/roomCategory/channel/get,/roomCategoryStatuses/roomCategory/get,/roomCategoryPricings/get,/roomCategoryRules/get,/roomCategoryPrice/**,/systemConfig/price/**,/cleanTask/**,/clean/statistics/**,/cleaner/**,/cleanLog/**,/cleanSettings/**,/cleanManage/cleanSetting/**,/cleanManage/cleanLog/**,/houseManage/logs/price/**
         - id: order-service
           uri: ${jeez.gateway.services.order}
           predicates:
-            - Path=/order-service/**,/order/report/get
+            - Path=/order-service/**,/order/report/get,/orders/get,/orders/house/page/get,/orders/houseLongRental/page/get,/orders/detail/get,/orders/strongReminder/page/get,/orders/page/get,/orders/create,/orders/*/cancel,/orders/*/check-in,/orders/*/check-out,/orders/*/guests/save,/coupons/page/get,/couponSendConfigs/page/get
+        - id: crm-service
+          uri: ${jeez.gateway.services.crm}
+          predicates:
+            - Path=/crm-service/**,/customers/page/get,/customers/detail/get,/customers/save,/memberTagGroup/**,/wxCpOpen/accounts/get,/wxcp/kfAccount/**,/scrm/sidebarPreview/**,/imWordsGroup/**,/imWords/**,/imYunxinUser/get,/systemMessage/page/get,/systemMessage/unReadCount/get,/systemMessage/read/all,/systemMessage/read/update,/userAuthority/notification/get,/userAuthority/exclude
+        - id: finance-service
+          uri: ${jeez.gateway.services.finance}
+          predicates:
+          - Path=/finance-service/**,/paymentWays/get,/paymentTypes/get,/paymentTypes/get/v2,/paymentTypes/custom/create,/paymentSettings/list,/paymentSettings/detail,/paymentSettings/create,/paymentSettings/status/update,/paymentSettings/default/update,/paymentSettings/sort/update,/paymentSettings/export,/orderLedger/dashboard/get,/accountBookPaymentWay/page/get,/report/storer/statement/get,/distribution/orders/page/get,/channels/social/overview,/channels/custom/list,/channels/custom/create,/channels/custom/update,/channels/custom/delete,/promotionPlanProducts/page/get,/report/promotion/get,/report/promotion/productSale/page/get,/shiftWorkConfig/page/get,/shiftWorkConfig/save,/shiftWorkGoods/page/get,/shiftWorkGoods/save,/shiftWorkReport/page/get
+        - id: platform-service
+          uri: ${jeez.gateway.services.platform}
+          predicates:
+            - Path=/auth/**,/user/**,/camps/**,/camp/**,/campRoles/get,/menus/**,/menu/**,/commons/get,/systemConfigs/**,/systemConfig/**,/printSettings/**,/memberSettings/**,/channels/**,/edition/**,/version/**,/company/**,/role/**,/roleAuthority/**,/paymentWays/**,/paymentTypes/**,/paymentSettings/**,/orderLedger/**,/ota/**,/distribution/**,/smsAccount/**,/smsTemplateMsgConfig/**,/roomCategories/**,/roomCategory/**,/channelRoomCategories/**,/weiRoomCategories/**,/youzan/**,/select/**,/categories/get,/cleanLog/page/get,/checkinGuestPsbLog/**,/radarConfig/shop/get,/report/monthly/page/get,/roomStatusOperationLog/page/get/v2,/report/homePage/v2,/report/accommodation/get,/report/accommodation/management/analysis/get,/report/profit/get/v2,/statistics/profit-report/export,/statistics/profit-report/export/download,/campFlow/get,/memo/page/get,/memo/add,/memo/handle,/backlogs/get
         - id: swagger-gateway-redirect
           uri: no://op
           predicates:
@@ -126,6 +134,8 @@ jeez:
       platform: http://localhost:8090
       room: http://localhost:8091
       order: http://localhost:8094
+      crm: http://localhost:8095
+      finance: http://localhost:8096
       zp-order: http://localhost:8094
       zp-inventory: http://localhost:8092
       zp-cleaning: http://localhost:8095
@@ -150,4 +160,6 @@ jeez:
         - /actuator/**
         - /room-service/ping
         - /order-service/ping
+        - /crm-service/ping
+        - /finance-service/ping
         - /auth/login

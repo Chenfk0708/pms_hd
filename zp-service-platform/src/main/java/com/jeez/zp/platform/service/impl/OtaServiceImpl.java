@@ -3,6 +3,7 @@ package com.jeez.zp.platform.service.impl;
 import com.jeez.zp.platform.api.TraceIdFactory;
 import com.jeez.zp.platform.dto.request.OtaChannelDetailRequest;
 import com.jeez.zp.platform.dto.request.OtaDashboardRequest;
+import com.jeez.zp.platform.dto.request.OtaLogPageRequest;
 import com.jeez.zp.platform.exception.BusinessException;
 import com.jeez.zp.platform.mapper.OtaMapper;
 import com.jeez.zp.platform.mapper.PlatformBootstrapMapper;
@@ -19,6 +20,10 @@ import com.jeez.zp.platform.vo.OtaDetailRoomQueryRowVO;
 import com.jeez.zp.platform.vo.OtaDetailRoomRowVO;
 import com.jeez.zp.platform.vo.OtaDetailStoreQueryRowVO;
 import com.jeez.zp.platform.vo.OtaDetailStoreRowVO;
+import com.jeez.zp.platform.vo.OtaLogPageVO;
+import com.jeez.zp.platform.vo.OtaLogPaginationVO;
+import com.jeez.zp.platform.vo.OtaLogQueryRowVO;
+import com.jeez.zp.platform.vo.OtaLogRowVO;
 import com.jeez.zp.platform.vo.OtaMetricVO;
 import com.jeez.zp.platform.vo.OtaOptionVO;
 import com.jeez.zp.platform.vo.OtaQuickLinkVO;
@@ -32,6 +37,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -48,6 +54,9 @@ public class OtaServiceImpl implements OtaService {
     private static final String PENDING_DIMENSION = "pending";
     private static final String DEFAULT_DIMENSION = "all";
     private static final String DEFAULT_STORE = "all";
+    private static final String DEFAULT_FILTER_VALUE = "all";
+    private static final String OPERATION_STATUS_SUCCESS = "success";
+    private static final String OPERATION_STATUS_FAILED = "failed";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final Map<Long, ChannelProfile> CHANNEL_PROFILES = buildChannelProfiles();
 
@@ -147,6 +156,40 @@ public class OtaServiceImpl implements OtaService {
         return detail;
     }
 
+    @Override
+    public OtaLogPageVO getLogPage(OtaLogPageRequest request, Long userId) {
+        Long campId = resolveAccessibleCampId(parseNullableLong(request.getCampId()), userId);
+        int page = normalizePage(request.getPage());
+        int pageSize = normalizePageSize(request.getPageSize());
+        String channelId = normalizeLogFilterValue(request.getChannelId());
+        String operationType = normalizeLogFilterValue(request.getOperationType());
+        String operationStatus = normalizeLogFilterValue(request.getOperationStatus());
+        String keyword = trimToNull(request.getKeyword());
+        String operator = trimToNull(request.getOperator());
+
+        List<OtaLogRowVO> filteredRows = otaMapper.selectLogRows(campId).stream()
+                .map(this::toOtaLogRow)
+                .filter(row -> matchesLogRow(row, channelId, operationType, operationStatus, keyword, operator))
+                .toList();
+
+        long total = filteredRows.size();
+        int fromIndex = Math.min((page - 1) * pageSize, filteredRows.size());
+        int toIndex = Math.min(fromIndex + pageSize, filteredRows.size());
+
+        OtaLogPaginationVO pagination = new OtaLogPaginationVO();
+        pagination.setPage(page);
+        pagination.setPageSize(pageSize);
+        pagination.setTotal(total);
+
+        OtaLogPageVO response = new OtaLogPageVO();
+        response.setChannelOptions(buildChannelOptions(campId));
+        response.setOperationTypeOptions(operationTypeOptions());
+        response.setOperationStatusOptions(operationStatusOptions());
+        response.setRows(filteredRows.subList(fromIndex, toIndex));
+        response.setPagination(pagination);
+        return response;
+    }
+
     private List<OtaOptionVO> storeOptions(Long campId) {
         return withAll(otaMapper.selectStoreOptions(campId), "全部门店");
     }
@@ -176,6 +219,23 @@ public class OtaServiceImpl implements OtaService {
                 option("all", "全部"),
                 option("linked", "已关联"),
                 option("unlinked", "未关联")
+        );
+    }
+
+    private List<OtaOptionVO> operationTypeOptions() {
+        return List.of(
+                option(DEFAULT_FILTER_VALUE, "全部类型"),
+                option("bindRoomType", "关联渠道房型"),
+                option("unbindRoomType", "解除渠道房型"),
+                option("bindAccount", "渠道授权")
+        );
+    }
+
+    private List<OtaOptionVO> operationStatusOptions() {
+        return List.of(
+                option(DEFAULT_FILTER_VALUE, "全部状态"),
+                option(OPERATION_STATUS_SUCCESS, "成功"),
+                option(OPERATION_STATUS_FAILED, "失败")
         );
     }
 
@@ -223,6 +283,7 @@ public class OtaServiceImpl implements OtaService {
 
         OtaChannelVO channel = new OtaChannelVO();
         channel.setId(profile.key());
+        channel.setAccountId(row.getAccountId());
         channel.setName(profile.displayName());
         channel.setRelation("connected".equals(connectionStatus) ? "关联房型 " + mappedRoomTypeCount + "/" + roomTypeCount : "等待授权");
         channel.setStatus(connectionStatus);
@@ -284,6 +345,71 @@ public class OtaServiceImpl implements OtaService {
 
     private OtaOptionVO toAccountOption(OtaAccountQueryRowVO row) {
         return option(row.getAccountId(), row.getAccountName() == null || row.getAccountName().isBlank() ? row.getChannelName() : row.getAccountName());
+    }
+
+    private List<OtaOptionVO> buildChannelOptions(Long campId) {
+        Map<String, OtaOptionVO> options = new LinkedHashMap<>();
+        options.put(DEFAULT_FILTER_VALUE, option(DEFAULT_FILTER_VALUE, "全部渠道"));
+        for (OtaAccountQueryRowVO row : otaMapper.selectAccounts(campId, null)) {
+            ChannelProfile profile = profile(row.getChannelId(), row.getChannelName());
+            options.putIfAbsent(profile.key(), option(profile.key(), profile.displayName()));
+        }
+        return new ArrayList<>(options.values());
+    }
+
+    private OtaLogRowVO toOtaLogRow(OtaLogQueryRowVO row) {
+        ChannelProfile profile = profile(row.getChannelId(), row.getChannelName());
+        OtaLogRowVO logRow = new OtaLogRowVO();
+        logRow.setChannelId(profile.key());
+        logRow.setChannel(profile.displayName());
+        logRow.setStatus("成功");
+        logRow.setOperator("系统同步");
+        if (row.getRoomRelId() != null && !row.getRoomRelId().isBlank()) {
+            logRow.setId("room-rel-" + row.getRoomRelId());
+            logRow.setType("关联渠道房型");
+            logRow.setOperationType("bindRoomType");
+            logRow.setContent("关联渠道房型-" + defaultString(row.getOutRoomCategoryId(), "-")
+                    + " 到 " + defaultString(row.getRoomCategoryName(), "-"));
+            logRow.setTime(formatDateTime(defaultDateTime(row.getRoomRelUpdatedAt(), row.getAccountUpdatedAt())));
+            return logRow;
+        }
+        logRow.setId("account-" + defaultString(row.getAccountId(), profile.key()));
+        logRow.setType("渠道授权");
+        logRow.setOperationType("bindAccount");
+        logRow.setContent("渠道授权-" + profile.displayName() + "账号已完成授权");
+        logRow.setTime(formatDateTime(defaultDateTime(row.getAccountAuthorizedAt(), row.getAccountUpdatedAt())));
+        return logRow;
+    }
+
+    private boolean matchesLogRow(
+            OtaLogRowVO row,
+            String channelId,
+            String operationType,
+            String operationStatus,
+            String keyword,
+            String operator
+    ) {
+        if (!DEFAULT_FILTER_VALUE.equals(channelId) && !channelId.equals(row.getChannelId())) {
+            return false;
+        }
+        if (!DEFAULT_FILTER_VALUE.equals(operationType) && !operationType.equals(row.getOperationType())) {
+            return false;
+        }
+        if (!DEFAULT_FILTER_VALUE.equals(operationStatus)) {
+            if (OPERATION_STATUS_SUCCESS.equals(operationStatus) && !"成功".equals(row.getStatus())) {
+                return false;
+            }
+            if (OPERATION_STATUS_FAILED.equals(operationStatus) && !"失败".equals(row.getStatus())) {
+                return false;
+            }
+        }
+        if (keyword != null
+                && !containsIgnoreCase(row.getContent(), keyword)
+                && !containsIgnoreCase(row.getChannel(), keyword)
+                && !containsIgnoreCase(row.getType(), keyword)) {
+            return false;
+        }
+        return operator == null || containsIgnoreCase(row.getOperator(), operator);
     }
 
     private OtaDetailRoomRowVO toRoomRow(OtaDetailRoomQueryRowVO queryRow) {
@@ -425,6 +551,38 @@ public class OtaServiceImpl implements OtaService {
 
     private String defaultString(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private LocalDateTime defaultDateTime(LocalDateTime primary, LocalDateTime fallback) {
+        return primary != null ? primary : fallback;
+    }
+
+    private int normalizePage(Integer page) {
+        return page == null || page < 1 ? 1 : page;
+    }
+
+    private int normalizePageSize(Integer pageSize) {
+        return pageSize == null || pageSize < 1 ? 6 : pageSize;
+    }
+
+    private String normalizeLogFilterValue(String value) {
+        String trimmed = trimToNull(value);
+        return trimmed == null ? DEFAULT_FILTER_VALUE : trimmed;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean containsIgnoreCase(String text, String keyword) {
+        if (text == null || keyword == null) {
+            return false;
+        }
+        return text.toLowerCase(Locale.ROOT).contains(keyword.toLowerCase(Locale.ROOT));
     }
 
     private ChannelProfile profile(Long channelId, String fallbackName) {

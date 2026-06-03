@@ -134,13 +134,13 @@ public class PaymentTypeServiceImpl implements PaymentTypeService {
     private Long resolveAccessibleCampId(Long requestedCampId, Long userId) {
         CurrentUserBundleVO bundle = platformBootstrapMapper.selectCurrentUserBundle(userId);
         if (bundle == null) {
-            throw new BusinessException(40401, "???????????????");
+            throw new BusinessException(40401, "当前用户未绑定可用门店");
         }
         if (requestedCampId == null) {
             return bundle.getCampId();
         }
         if (!requestedCampId.equals(bundle.getCampId())) {
-            throw new BusinessException(40301, "?????????????????????");
+            throw new BusinessException(40301, "无权访问当前门店支付方式");
         }
         return requestedCampId;
     }

@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.order.mapper.OrderActionMapper">
+
+    <insert id="insertOrderMain">
+        INSERT INTO order_main (
+            order_id,
+            camp_id,
+            poi_id,
+            room_category_id,
+            room_id,
+            channel_id,
+            goods_id,
+            order_no,
+            out_order_no,
+            order_type,
+            status,
+            guest_name,
+            guest_mobile,
+            start_at,
+            end_at,
+            day_num,
+            total_price_cent,
+            discount_price_cent,
+            total_pay_price_cent,
+            refund_price_cent,
+            commission_price_cent,
+            payment_fee_cent,
+            platform_service_fee_cent,
+            distribution_commission_cent,
+            settlement_amount_cent,
+            payment_status,
+            payment_type_id,
+            payment_way_id,
+            source_type,
+            poi_name_snapshot,
+            room_category_name_snapshot,
+            room_name_snapshot,
+            stay_type_snapshot,
+            source_label_snapshot,
+            channel_order_no_snapshot,
+            deposit_price_cent,
+            other_price_cent,
+            invoice_issuer,
+            invoice_amount_cent,
+            emergency_name,
+            emergency_mobile,
+            payment_cycle,
+            payment_month,
+            payment_day,
+            room_charge_status,
+            room_charge_received_cent,
+            room_charge_method,
+            deposit_charge_status,
+            deposit_charge_received_cent,
+            deposit_charge_method,
+            reminder_enabled,
+            contract_due_mode,
+            contract_no,
+            next_payment_date,
+            next_payment_amount_cent,
+            extra_fee_cent,
+            room_snapshot_json,
+            order_tags_json,
+            order_reminders_json,
+            extra_fee_items_json,
+            billing_snapshot_json,
+            remark,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+            is_deleted,
+            version_no
+        ) VALUES (
+            #{orderId},
+            #{campId},
+            #{poiId},
+            #{roomCategoryId},
+            #{roomId},
+            NULL,
+            NULL,
+            #{orderNo},
+            #{outOrderNo},
+            #{orderType},
+            'booked',
+            #{guestName},
+            #{guestMobile},
+            #{startAt},
+            #{endAt},
+            #{dayNum},
+            #{totalPriceCent},
+            0,
+            #{totalPayPriceCent},
+            0,
+            #{commissionPriceCent},
+            0,
+            0,
+            0,
+            #{totalPayPriceCent},
+            #{paymentStatus},
+            #{paymentTypeId},
+            #{paymentWayId},
+            #{sourceType},
+            #{poiNameSnapshot},
+            #{roomCategoryNameSnapshot},
+            #{roomNameSnapshot},
+            #{stayTypeSnapshot},
+            #{sourceLabelSnapshot},
+            #{channelOrderNoSnapshot},
+            #{depositPriceCent},
+            #{otherPriceCent},
+            #{invoiceIssuer},
+            #{invoiceAmountCent},
+            #{emergencyName},
+            #{emergencyMobile},
+            #{paymentCycle},
+            #{paymentMonth},
+            #{paymentDay},
+            #{roomChargeStatus},
+            #{roomChargeReceivedCent},
+            #{roomChargeMethod},
+            #{depositChargeStatus},
+            #{depositChargeReceivedCent},
+            #{depositChargeMethod},
+            #{reminderEnabled},
+            #{contractDueMode},
+            #{contractNo},
+            #{nextPaymentDate},
+            #{nextPaymentAmountCent},
+            #{extraFeeCent},
+            CAST(#{roomSnapshotJson} AS JSON),
+            CAST(#{orderTagsJson} AS JSON),
+            CAST(#{orderRemindersJson} AS JSON),
+            CAST(#{extraFeeItemsJson} AS JSON),
+            CAST(#{billingSnapshotJson} AS JSON),
+            #{remark},
+            NOW(),
+            NOW(),
+            #{userId},
+            #{userId},
+            0,
+            0
+        )
+    </insert>
+
+    <select id="selectOrderForUpdate" resultType="com.jeez.zp.order.vo.OrderActionRowVO">
+        SELECT
+            om.order_id AS orderId,
+            om.camp_id AS campId,
+            om.status AS status,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile
+        FROM order_main om
+        WHERE om.camp_id = #{campId}
+          AND om.order_id = #{orderId}
+          AND om.is_deleted = 0
+        FOR UPDATE
+    </select>
+
+    <update id="updateOrderStatus">
+        UPDATE order_main
+        SET status = #{status},
+            payment_status = COALESCE(#{paymentStatus}, payment_status),
+            remark = COALESCE(#{remark}, remark),
+            updated_at = NOW(),
+            updated_by = #{userId},
+            version_no = version_no + 1
+        WHERE camp_id = #{campId}
+          AND order_id = #{orderId}
+          AND is_deleted = 0
+    </update>
+
+    <delete id="deleteOrderGuests">
+        DELETE FROM order_guest
+        WHERE order_id = #{orderId}
+    </delete>
+
+    <insert id="insertOrderGuest">
+        INSERT INTO order_guest (
+            id,
+            order_id,
+            guest_name,
+            guest_mobile,
+            guest_id_card_type,
+            guest_id_card,
+            guest_type,
+            created_at
+        ) VALUES (
+            #{guestId},
+            #{orderId},
+            #{guestName},
+            #{guestMobile},
+            #{guestIdCardType},
+            #{guestIdCard},
+            #{guestType},
+            NOW()
+        )
+    </insert>
+</mapper>

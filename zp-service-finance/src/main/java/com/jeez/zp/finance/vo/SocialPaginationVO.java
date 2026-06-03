@@ -1,0 +1,14 @@
+package com.jeez.zp.finance.vo;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class SocialPaginationVO {
+    private Integer page;
+    private Integer pageSize;
+    private Long total;
+}

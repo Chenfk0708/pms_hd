@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.crm.mapper.CustomerMapper">
+
+    <select id="selectCustomers" resultType="com.jeez.zp.crm.vo.CustomerItemVO">
+        SELECT
+            CAST(customer_id AS CHAR) AS customerId,
+            name AS name,
+            mobile AS mobile,
+            CAST(profile_json AS CHAR) AS profileJson,
+            DATE_FORMAT(last_active_at, '%Y-%m-%d %H:%i') AS lastActiveAt,
+            status AS status
+        FROM crm_customer
+        WHERE camp_id = #{campId}
+          AND is_deleted = 0
+        <if test="keyword != null and keyword != ''">
+            AND (
+                CAST(customer_id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                OR name LIKE CONCAT('%', #{keyword}, '%')
+                OR mobile LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        ORDER BY last_active_at DESC, customer_id DESC
+    </select>
+
+    <select id="selectCustomerDetail" resultType="com.jeez.zp.crm.vo.CustomerItemVO">
+        SELECT
+            CAST(customer_id AS CHAR) AS customerId,
+            name AS name,
+            mobile AS mobile,
+            CAST(profile_json AS CHAR) AS profileJson,
+            DATE_FORMAT(last_active_at, '%Y-%m-%d %H:%i') AS lastActiveAt,
+            status AS status
+        FROM crm_customer
+        WHERE camp_id = #{campId}
+          AND customer_id = #{customerId}
+          AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <insert id="upsertCustomer">
+        INSERT INTO crm_customer (
+            customer_id,
+            camp_id,
+            member_id,
+            name,
+            mobile,
+            source_channel_id,
+            profile_json,
+            last_active_at,
+            status,
+            created_at,
+            updated_at,
+            is_deleted
+        ) VALUES (
+            #{customerId},
+            #{campId},
+            NULL,
+            #{name},
+            #{mobile},
+            NULL,
+            CAST(#{profileJson} AS JSON),
+            NOW(),
+            1,
+            NOW(),
+            NOW(),
+            0
+        )
+        ON DUPLICATE KEY UPDATE
+            name = VALUES(name),
+            mobile = VALUES(mobile),
+            profile_json = VALUES(profile_json),
+            last_active_at = NOW(),
+            updated_at = NOW(),
+            is_deleted = 0
+    </insert>
+</mapper>

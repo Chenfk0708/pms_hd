@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.MemberSettingMapper">
+
+    <select id="selectRoles" resultType="com.jeez.zp.platform.vo.MemberSettingRoleVO">
+        SELECT
+            CAST(r.role_id AS CHAR) AS roleId,
+            r.role_name AS roleName
+        FROM pms_role r
+        WHERE r.camp_id = #{campId}
+          AND r.is_deleted = 0
+          AND r.status = 1
+        ORDER BY r.is_system DESC, r.role_id ASC
+    </select>
+
+    <select id="selectRoomCategories" resultType="com.jeez.zp.platform.vo.MemberSettingRoomCategoryVO">
+        SELECT
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName
+        FROM room_category rc
+        WHERE rc.camp_id = #{campId}
+          AND rc.is_deleted = 0
+          AND rc.status = 1
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC
+    </select>
+
+    <select id="selectMembers" resultType="com.jeez.zp.platform.vo.MemberSettingMemberVO">
+        SELECT
+            CAST(COALESCE(m.user_id, m.member_id) AS CHAR) AS userId,
+            m.name AS name,
+            COALESCE(m.mobile, '') AS phone,
+            CAST(m.role_id AS CHAR) AS roleId,
+            COALESCE(r.role_name, '-') AS roleName,
+            CASE WHEN m.wecom_user_id IS NULL OR m.wecom_user_id = '' THEN 'unbound' ELSE 'bound' END AS wecomStatus,
+            CASE WHEN m.wecom_user_id IS NULL OR m.wecom_user_id = '' THEN '点击绑定' ELSE '已绑定' END AS wecomLabel,
+            COALESCE(m.email, '-') AS email
+        FROM pms_member m
+        LEFT JOIN pms_role r ON r.role_id = m.role_id
+            AND r.is_deleted = 0
+        WHERE m.camp_id = #{campId}
+          AND m.is_deleted = 0
+          AND m.status = 1
+        <if test="keyword != null and keyword != ''">
+          AND (
+              m.name LIKE CONCAT('%', #{keyword}, '%')
+              OR m.mobile LIKE CONCAT('%', #{keyword}, '%')
+              OR r.role_name LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        <if test="roleName != null and roleName != '' and roleName != '全部'">
+          AND r.role_name = #{roleName}
+        </if>
+        ORDER BY m.member_id ASC
+    </select>
+
+    <select id="selectMemberByUserId" resultType="com.jeez.zp.platform.vo.MemberSettingMemberVO">
+        SELECT
+            CAST(COALESCE(m.user_id, m.member_id) AS CHAR) AS userId,
+            m.name AS name,
+            COALESCE(m.mobile, '') AS phone,
+            CAST(m.role_id AS CHAR) AS roleId,
+            COALESCE(r.role_name, '-') AS roleName,
+            CASE WHEN m.wecom_user_id IS NULL OR m.wecom_user_id = '' THEN 'unbound' ELSE 'bound' END AS wecomStatus,
+            CASE WHEN m.wecom_user_id IS NULL OR m.wecom_user_id = '' THEN '点击绑定' ELSE '已绑定' END AS wecomLabel,
+            COALESCE(m.email, '-') AS email
+        FROM pms_member m
+        LEFT JOIN pms_role r ON r.role_id = m.role_id
+            AND r.is_deleted = 0
+        WHERE m.camp_id = #{campId}
+          AND m.is_deleted = 0
+          AND m.status = 1
+          AND COALESCE(m.user_id, m.member_id) = #{userId}
+        LIMIT 1
+    </select>
+</mapper>

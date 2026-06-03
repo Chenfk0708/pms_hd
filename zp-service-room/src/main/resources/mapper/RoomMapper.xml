@@ -13,6 +13,55 @@
         </if>
     </sql>
 
+    <sql id="roomPageFilters">
+        WHERE r.camp_id = #{campId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        <if test="poiId != null">
+            AND r.poi_id = #{poiId}
+        </if>
+        <include refid="roomCategoryIdFilter"/>
+        <if test="isAvailability != null and isAvailability == 1">
+            AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+        </if>
+        <if test="saleType != null and saleType == 1">
+            AND (r.sale_type IS NULL OR r.sale_type != 'hourly')
+        </if>
+        <if test="saleType != null and saleType == 2">
+            AND r.sale_type = 'hourly'
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                r.room_name LIKE CONCAT('%', #{keyword}, '%')
+                OR rc.name LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+    </sql>
+
+    <sql id="roomStatusesRoomCategoryFilters">
+        WHERE rc.camp_id = #{campId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+          AND r.status = 1
+          AND r.is_deleted = 0
+          AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+        <include refid="roomCategoryIdFilter"/>
+        <if test="poiIds != null and poiIds.size() > 0">
+            AND rc.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                rc.name LIKE CONCAT('%', #{keyword}, '%')
+                OR r.room_name LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+    </sql>
+
     <select id="selectRoomCategoryGroups" resultType="com.jeez.zp.room.vo.RoomCategoryRoomsGroupVO">
         SELECT
             CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
@@ -52,6 +101,7 @@
             AND rc.status = 1
             AND rc.is_deleted = 0
         LEFT JOIN room_floor rf ON rf.floor_id = r.floor_id
+            AND rf.camp_id = r.camp_id
             AND rf.is_deleted = 0
             AND rf.status = 1
         WHERE r.camp_id = #{campId}
@@ -63,6 +113,116 @@
         </if>
         <if test="saleType != null and saleType == 2">
             AND r.sale_type = 'hourly'
+        </if>
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC, r.sort_no ASC, r.room_id ASC
+    </select>
+
+    <select id="countRoomsPage" resultType="long">
+        SELECT COUNT(1)
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+        <include refid="roomPageFilters"/>
+    </select>
+
+    <select id="selectRoomsPage" resultType="com.jeez.zp.room.vo.RoomPageItemVO">
+        SELECT
+            CAST(r.room_id AS CHAR) AS roomId,
+            CAST(r.room_id AS CHAR) AS id,
+            r.room_name AS roomName,
+            r.room_name AS name,
+            CAST(r.camp_id AS CHAR) AS campId,
+            CAST(r.poi_id AS CHAR) AS poiId,
+            CAST(r.poi_id AS CHAR) AS storeId,
+            p.poi_name AS storeName,
+            CAST(r.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName,
+            CAST(r.floor_id AS CHAR) AS floorId,
+            rf.floor_name AS floorName,
+            CASE
+                WHEN r.clean_status = 'dirty' THEN 1
+                WHEN r.clean_status = 'clean' THEN 0
+                ELSE NULL
+            END AS isDirty,
+            CASE
+                WHEN r.lock_status = 'offline' THEN 0
+                WHEN r.lock_status IS NULL OR r.lock_status = '' THEN NULL
+                ELSE 1
+            END AS isCanBooking,
+            r.lock_status AS lockStatus,
+            r.sale_type AS saleType,
+            r.clean_status AS cleanStatus,
+            0 AS seq
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+        LEFT JOIN room_floor rf ON rf.floor_id = r.floor_id
+            AND rf.camp_id = r.camp_id
+            AND rf.is_deleted = 0
+            AND rf.status = 1
+        LEFT JOIN pms_poi p ON p.poi_id = r.poi_id
+            AND p.camp_id = r.camp_id
+            AND p.is_deleted = 0
+            AND p.status = 1
+        <include refid="roomPageFilters"/>
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC, r.sort_no ASC, r.room_id ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="countRoomStatusesRoomCategories" resultType="long">
+        SELECT COUNT(DISTINCT rc.room_category_id)
+        FROM room_category rc
+        JOIN room r ON r.room_category_id = rc.room_category_id
+            AND r.camp_id = rc.camp_id
+        <include refid="roomStatusesRoomCategoryFilters"/>
+    </select>
+
+    <select id="selectRoomStatusesRoomCategories" resultType="com.jeez.zp.room.vo.RoomStatusesRoomsCategoryVO">
+        SELECT DISTINCT
+            rc.sort_no AS sortNo,
+            CAST(rc.camp_id AS CHAR) AS campId,
+            CAST(rc.poi_id AS CHAR) AS storeId,
+            p.poi_name AS storeName,
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName
+        FROM room_category rc
+        JOIN room r ON r.room_category_id = rc.room_category_id
+            AND r.camp_id = rc.camp_id
+        LEFT JOIN pms_poi p ON p.poi_id = rc.poi_id
+            AND p.camp_id = rc.camp_id
+            AND p.is_deleted = 0
+            AND p.status = 1
+        <include refid="roomStatusesRoomCategoryFilters"/>
+        ORDER BY sortNo ASC, roomCategoryId ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="selectRoomStatusesRooms" resultType="com.jeez.zp.room.vo.RoomStatusesRoomsRoomVO">
+        SELECT
+            CAST(r.room_category_id AS CHAR) AS roomCategoryId,
+            CAST(r.room_id AS CHAR) AS roomId,
+            r.room_name AS roomName
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+          AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+        <include refid="roomCategoryIdFilter"/>
+        <if test="poiIds != null and poiIds.size() > 0">
+            AND r.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                r.room_name LIKE CONCAT('%', #{keyword}, '%')
+                OR rc.name LIKE CONCAT('%', #{keyword}, '%')
+            )
         </if>
         ORDER BY rc.sort_no ASC, rc.room_category_id ASC, r.sort_no ASC, r.room_id ASC
     </select>

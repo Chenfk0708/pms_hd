@@ -83,6 +83,44 @@ class WorkspaceDashboardQueryIT {
 
     @Test
     @Timeout(60)
+    void reportHomePageV2_shouldCountLifecycleOrdersWhenSameRoomTurnsOverToday() throws Exception {
+        cleanupWorkspaceScene();
+        insertCamp();
+        rebindCurrentUserCamp();
+        insertPoi();
+        insertRoomCategory();
+        insertRoom(ROOM_ID_1, "A-101", "normal", "clean", 1);
+
+        LocalDate today = LocalDate.now(SHANGHAI_ZONE);
+        LocalDate yesterday = today.minusDays(1);
+        LocalDate tomorrow = today.plusDays(1);
+
+        insertOrderMain(19651L, null, ROOM_ID_1, "checked_in", "paid",
+                "Today leaving guest", "13900000501", yesterday, today, yesterday.atTime(9, 0),
+                24000, 24000, 0, 0, 24000, "frontdesk", "same room checkout");
+        insertOrderMain(19652L, null, ROOM_ID_1, "booked", "paid",
+                "Today arriving guest", "13900000502", today, tomorrow, today.atTime(8, 0),
+                30000, 30000, 0, 0, 30000, "frontdesk", "same room arrival");
+
+        mockMvc.perform(post("/report/homePage/v2")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"19101"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.nowPredictCheckIn").value(1))
+                .andExpect(jsonPath("$.data.nowAlreadyCheckIn").value(1))
+                .andExpect(jsonPath("$.data.nowPredictCheckOut").value(1));
+    }
+
+    @Test
+    @Timeout(60)
     void reportHomePageV2_shouldFallbackInvalidCampIdAndRejectForeignCamp() throws Exception {
         seedWorkspaceScene();
 
@@ -287,8 +325,12 @@ class WorkspaceDashboardQueryIT {
 
     @Test
     @Timeout(60)
-    void memoPageGet_shouldReturnEmptyWorkspaceShape() throws Exception {
+    void memoPageGet_shouldReturnWorkspaceMemoRows() throws Exception {
+        ensureWorkspaceMemoTable();
+        cleanupWorkspaceMemoTable();
         seedWorkspaceScene();
+        insertWorkspaceMemo(19821L, "今天 18:00 前确认预抵客人发票抬头", 0, LocalDateTime.of(2026, 5, 31, 10, 0));
+        insertWorkspaceMemo(19822L, "已通知工程检查 A-104 门锁", 1, LocalDateTime.of(2026, 5, 31, 9, 0));
 
         mockMvc.perform(post("/memo/page/get")
                         .header(AUTH_VERIFIED_HEADER, "true")
@@ -305,11 +347,79 @@ class WorkspaceDashboardQueryIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.total").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.pagination.page").value(1))
                 .andExpect(jsonPath("$.data.pagination.pageSize").value(10))
-                .andExpect(jsonPath("$.data.pagination.total").value(0))
-                .andExpect(jsonPath("$.data.list.length()").value(0));
+                .andExpect(jsonPath("$.data.pagination.total").value(1))
+                .andExpect(jsonPath("$.data.list.length()").value(1))
+                .andExpect(jsonPath("$.data.list[0].memoId").value("19821"))
+                .andExpect(jsonPath("$.data.list[0].content").value("今天 18:00 前确认预抵客人发票抬头"))
+                .andExpect(jsonPath("$.data.list[0].isHandle").value(0));
+    }
+
+    @Test
+    @Timeout(60)
+    void memoAddAndHandle_shouldPersistWorkspaceMemoLifecycle() throws Exception {
+        ensureWorkspaceMemoTable();
+        cleanupWorkspaceMemoTable();
+        seedWorkspaceScene();
+
+        mockMvc.perform(post("/memo/add")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"19101",
+                                  "content":"跟进今日预抵客人"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.memoId").isString())
+                .andExpect(jsonPath("$.data.content").value("跟进今日预抵客人"))
+                .andExpect(jsonPath("$.data.isHandle").value(0));
+
+        mockMvc.perform(post("/memo/page/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"19101",
+                                  "pageNum":1,
+                                  "pageSize":10,
+                                  "isHandle":0
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.list[0].content").value("跟进今日预抵客人"));
+
+        String memoId = String.valueOf(jdbcTemplate.queryForObject("""
+                SELECT memo_id
+                FROM workspace_memo
+                WHERE camp_id = ? AND content = ?
+                """, Long.class, ISOLATED_CAMP_ID, "跟进今日预抵客人"));
+
+        mockMvc.perform(post("/memo/handle")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"19101",
+                                  "memoId":"%s",
+                                  "isHandle":1
+                                }
+                                """.formatted(memoId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.memoId").value(memoId))
+                .andExpect(jsonPath("$.data.isHandle").value(1));
     }
 
     @Test
@@ -335,7 +445,41 @@ class WorkspaceDashboardQueryIT {
                 .andExpect(jsonPath("$.data[1].content").value(containsString("\"title\"")));
     }
 
+    @Test
+    @Timeout(60)
+    void backlogsGet_shouldReturnProductDynamicsFromGoods() throws Exception {
+        seedWorkspaceScene();
+        insertGoodsMain(
+                19701L,
+                "Workspace Product Dynamic Coupon",
+                "coupon",
+                18800L,
+                20,
+                "on_shelf",
+                "published",
+                LocalDateTime.of(2026, 5, 31, 9, 0)
+        );
+
+        mockMvc.perform(post("/backlogs/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"19101"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[2].content").value(containsString("\"type\":\"product\"")))
+                .andExpect(jsonPath("$.data[2].content").value(containsString("Workspace Product Dynamic Coupon")))
+                .andExpect(jsonPath("$.data[2].content").value(containsString("预售券")));
+    }
+
     private void seedWorkspaceScene() {
+        cleanupWorkspaceScene();
         insertCamp();
         rebindCurrentUserCamp();
         insertPoi();
@@ -622,6 +766,109 @@ class WorkspaceDashboardQueryIT {
                 remark,
                 Timestamp.valueOf(createdAt),
                 Timestamp.valueOf(createdAt.plusMinutes(30)),
+                CURRENT_USER_ID,
+                CURRENT_USER_ID
+        );
+    }
+
+    private void insertGoodsMain(
+            long goodsId,
+            String name,
+            String goodsType,
+            long sellingPriceCent,
+            int stock,
+            String shelfStatus,
+            String status,
+            LocalDateTime updatedAt
+    ) {
+        jdbcTemplate.update("""
+                        INSERT INTO goods_main (
+                            goods_id,
+                            camp_id,
+                            goods_type,
+                            name,
+                            selling_price_cent,
+                            stock,
+                            shelf_status,
+                            status,
+                            created_at,
+                            updated_at,
+                            is_deleted
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        """,
+                goodsId,
+                ISOLATED_CAMP_ID,
+                goodsType,
+                name,
+                sellingPriceCent,
+                stock,
+                shelfStatus,
+                status,
+                Timestamp.valueOf(updatedAt.minusDays(1)),
+                Timestamp.valueOf(updatedAt)
+        );
+    }
+
+    private void ensureWorkspaceMemoTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS workspace_memo (
+                    memo_id BIGINT NOT NULL,
+                    camp_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    content VARCHAR(500) NOT NULL,
+                    is_handle TINYINT NOT NULL DEFAULT 0,
+                    handled_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    created_by BIGINT NULL,
+                    updated_by BIGINT NULL,
+                    is_deleted TINYINT NOT NULL DEFAULT 0,
+                    PRIMARY KEY (memo_id),
+                    KEY idx_workspace_memo_camp_handle (camp_id, is_handle, is_deleted, created_at),
+                    KEY idx_workspace_memo_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工作台备忘录'
+                """);
+    }
+
+    private void cleanupWorkspaceMemoTable() {
+        jdbcTemplate.update("DELETE FROM workspace_memo WHERE camp_id = ?", ISOLATED_CAMP_ID);
+    }
+
+    private void cleanupWorkspaceScene() {
+        jdbcTemplate.update("UPDATE pms_member SET camp_id = ? WHERE user_id = ?", ORIGINAL_CAMP_ID, CURRENT_USER_ID);
+        jdbcTemplate.update("DELETE FROM goods_main WHERE camp_id = ?", ISOLATED_CAMP_ID);
+        jdbcTemplate.update("DELETE FROM order_main WHERE camp_id = ?", ISOLATED_CAMP_ID);
+        jdbcTemplate.update("DELETE FROM channel_account WHERE camp_id = ?", ISOLATED_CAMP_ID);
+        jdbcTemplate.update("DELETE FROM room WHERE camp_id = ?", ISOLATED_CAMP_ID);
+        jdbcTemplate.update("DELETE FROM room_category WHERE camp_id = ?", ISOLATED_CAMP_ID);
+        jdbcTemplate.update("DELETE FROM pms_poi WHERE camp_id = ?", ISOLATED_CAMP_ID);
+        jdbcTemplate.update("DELETE FROM pms_camp WHERE camp_id = ?", ISOLATED_CAMP_ID);
+    }
+
+    private void insertWorkspaceMemo(long memoId, String content, int isHandle, LocalDateTime createdAt) {
+        jdbcTemplate.update("""
+                        INSERT INTO workspace_memo (
+                            memo_id,
+                            camp_id,
+                            user_id,
+                            content,
+                            is_handle,
+                            handled_at,
+                            created_at,
+                            updated_at,
+                            created_by,
+                            updated_by,
+                            is_deleted
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        """,
+                memoId,
+                ISOLATED_CAMP_ID,
+                CURRENT_USER_ID,
+                content,
+                isHandle,
+                isHandle == 1 ? Timestamp.valueOf(createdAt.plusHours(1)) : null,
+                Timestamp.valueOf(createdAt),
+                Timestamp.valueOf(createdAt.plusMinutes(5)),
                 CURRENT_USER_ID,
                 CURRENT_USER_ID
         );

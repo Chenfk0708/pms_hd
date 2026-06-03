@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.crm.mapper.AuthorityMapper">
+
+    <select id="selectNotificationAuthorities" resultType="com.jeez.zp.crm.vo.AuthorityItemVO">
+        SELECT
+            CAST(ad.authority_id AS CHAR) AS authorityId,
+            ad.authority_name AS authorityName,
+            ad.authority_code AS authorityCode,
+            CASE WHEN uae.is_excluded = 1 THEN TRUE ELSE FALSE END AS excluded
+        FROM authority_dict ad
+        LEFT JOIN user_authority_exclude uae ON uae.authority_id = ad.authority_id
+            AND uae.camp_id = #{campId}
+            AND uae.user_id = #{userId}
+        WHERE ad.authority_type = 'notification'
+          AND ad.status = 1
+        ORDER BY ad.module_name ASC, ad.seq_no ASC, ad.authority_id ASC
+    </select>
+
+    <insert id="upsertExclude">
+        INSERT INTO user_authority_exclude (
+            id,
+            camp_id,
+            user_id,
+            authority_id,
+            is_excluded,
+            updated_at,
+            updated_by
+        ) VALUES (
+            #{id},
+            #{campId},
+            #{userId},
+            #{authorityId},
+            1,
+            NOW(),
+            #{userId}
+        )
+        ON DUPLICATE KEY UPDATE
+            is_excluded = 1,
+            updated_at = NOW(),
+            updated_by = #{userId}
+    </insert>
+
+    <update id="restoreExclude">
+        UPDATE user_authority_exclude
+        SET is_excluded = 0,
+            updated_at = NOW(),
+            updated_by = #{userId}
+        WHERE camp_id = #{campId}
+          AND user_id = #{userId}
+          AND authority_id = #{authorityId}
+    </update>
+</mapper>

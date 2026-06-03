@@ -1,5 +1,6 @@
 package com.jeez.zp.room.service.impl;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jeez.zp.room.exception.BusinessException;
@@ -7,6 +8,7 @@ import com.jeez.zp.room.mapper.CleanSettingMapper;
 import com.jeez.zp.room.mapper.UserCampMapper;
 import com.jeez.zp.room.service.CleanSettingService;
 import com.jeez.zp.room.vo.CleanSettingBootstrapResponseVO;
+import com.jeez.zp.room.vo.CleanSettingExportResponseVO;
 import com.jeez.zp.room.vo.CleanSettingMetricVO;
 import com.jeez.zp.room.vo.CleanSettingOptionVO;
 import com.jeez.zp.room.vo.CleanSettingPaginationVO;
@@ -14,9 +16,11 @@ import com.jeez.zp.room.vo.CleanSettingPolicyRuleVO;
 import com.jeez.zp.room.vo.CleanSettingPriceRuleVO;
 import com.jeez.zp.room.vo.CleanSettingReminderVO;
 import com.jeez.zp.room.vo.CleanSettingRowVO;
+import com.jeez.zp.room.vo.CleanSettingRuleSaveResponseVO;
 import com.jeez.zp.room.vo.CleanSettingScheduleVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -99,6 +103,64 @@ public class CleanSettingServiceImpl implements CleanSettingService {
         return response;
     }
 
+    @Override
+    @Transactional
+    public CleanSettingRuleSaveResponseVO savePolicyRule(Long campId, Long userId, CleanSettingPolicyRuleVO rule) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        validateRule(rule);
+
+        List<CleanSettingPolicyRuleVO> rules = new ArrayList<>(loadPolicyRules(resolvedCampId));
+        rules.removeIf(existing -> rule.getId().equals(existing.getId()));
+        if (rule.getUpdatedAt() == null || rule.getUpdatedAt().isBlank()) {
+            rule.setUpdatedAt(LocalDateTime.now(SHANGHAI_ZONE).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+        }
+        rules.add(rule);
+        rules.sort(Comparator.comparing(CleanSettingPolicyRuleVO::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
+
+        cleanSettingMapper.upsertSetting(
+                IdWorker.getId(),
+                resolvedCampId,
+                "policy_rules",
+                writeJson(rules, "\u4FDD\u6D01\u7B56\u7565\u914D\u7F6E\u683C\u5F0F\u9519\u8BEF"),
+                userId
+        );
+
+        CleanSettingRuleSaveResponseVO response = new CleanSettingRuleSaveResponseVO();
+        response.setRule(rule);
+        response.setTotal(rules.size());
+        response.setMessage("\u4FDD\u6D01\u7B56\u7565\u4FDD\u5B58\u6210\u529F");
+        return response;
+    }
+
+    @Override
+    public CleanSettingExportResponseVO export(
+            Long campId,
+            Long userId,
+            String businessDate,
+            String storeId,
+            String projectId,
+            String status
+    ) {
+        CleanSettingBootstrapResponseVO dashboard = bootstrap(
+                campId,
+                userId,
+                businessDate,
+                storeId,
+                projectId,
+                status,
+                DEFAULT_PAGE,
+                Integer.MAX_VALUE
+        );
+        LocalDate exportDate = parseBusinessDate(businessDate);
+        CleanSettingExportResponseVO response = new CleanSettingExportResponseVO();
+        response.setFileName("clean_setting_" + exportDate.format(DATE_FORMATTER) + ".csv");
+        response.setContentType("text/csv");
+        response.setPolicyRules(dashboard.getPolicyRules());
+        response.setPriceRules(dashboard.getPriceRules());
+        response.setTotal(dashboard.getPolicyRules().size() + dashboard.getPriceRules().size());
+        return response;
+    }
+
     private List<CleanSettingOptionVO> buildStores(Long campId) {
         List<CleanSettingOptionVO> stores = new ArrayList<>();
         stores.add(new CleanSettingOptionVO(FILTER_ALL, "\u5168\u90E8\u95E8\u5E97"));
@@ -168,6 +230,37 @@ public class CleanSettingServiceImpl implements CleanSettingService {
                     .toList();
         } catch (Exception ex) {
             throw new BusinessException(50001, "\u4FDD\u6D01\u7B56\u7565\u914D\u7F6E\u683C\u5F0F\u9519\u8BEF");
+        }
+    }
+
+    private List<CleanSettingPolicyRuleVO> loadPolicyRules(Long campId) {
+        Map<String, CleanSettingRowVO> settingRows = cleanSettingMapper.selectSettings(campId).stream()
+                .collect(Collectors.toMap(CleanSettingRowVO::getConfigKey, Function.identity(), (left, right) -> right));
+        return parsePolicyRules(settingRows.get("policy_rules"));
+    }
+
+    private String writeJson(Object value, String errorMessage) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception ex) {
+            throw new BusinessException(50001, errorMessage);
+        }
+    }
+
+    private void validateRule(CleanSettingPolicyRuleVO rule) {
+        if (rule == null) {
+            throw new BusinessException(40001, "rule is required");
+        }
+        requireText(rule.getId(), "rule.id");
+        requireText(rule.getName(), "rule.name");
+        if (!STATUS_ENABLED.equals(rule.getStatus()) && !STATUS_PAUSED.equals(rule.getStatus())) {
+            throw new BusinessException(40001, "rule.status is invalid");
+        }
+    }
+
+    private void requireText(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(40001, fieldName + " is required");
         }
     }
 

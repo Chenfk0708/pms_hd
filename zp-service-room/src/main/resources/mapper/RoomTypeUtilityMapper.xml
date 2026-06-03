@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.room.mapper.RoomTypeUtilityMapper">
+
+    <select id="selectFloors" resultType="com.jeez.zp.room.mapper.RoomTypeUtilityRow">
+        SELECT
+            rf.floor_id AS id,
+            rf.poi_id AS poiId,
+            rf.floor_name AS name,
+            rf.sort_no AS sortNo,
+            COUNT(DISTINCT rc.room_category_id) AS roomTypeCount,
+            GROUP_CONCAT(DISTINCT rc.room_category_id ORDER BY rc.sort_no, rc.room_category_id SEPARATOR ',') AS roomTypeIdsText,
+            GROUP_CONCAT(DISTINCT rc.name ORDER BY rc.sort_no, rc.room_category_id SEPARATOR ',') AS roomTypeNamesText
+        FROM room_floor rf
+        LEFT JOIN room_category_floor_rel rcfr ON rcfr.floor_id = rf.floor_id
+            AND rcfr.camp_id = rf.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = rcfr.room_category_id
+            AND rc.camp_id = rf.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE rf.camp_id = #{campId}
+          AND rf.status = 1
+          AND rf.is_deleted = 0
+        <if test="poiId != null">
+          AND rf.poi_id = #{poiId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND rf.floor_name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        GROUP BY rf.floor_id, rf.poi_id, rf.floor_name, rf.sort_no
+        ORDER BY rf.sort_no ASC, rf.floor_id ASC
+    </select>
+
+    <select id="selectTags" resultType="com.jeez.zp.room.mapper.RoomTypeUtilityRow">
+        SELECT
+            rt.tag_id AS id,
+            rt.tag_name AS name,
+            rt.tag_type AS tagType,
+            rt.sort_no AS sortNo,
+            COUNT(DISTINCT rc.room_category_id) AS roomTypeCount,
+            GROUP_CONCAT(DISTINCT rc.room_category_id ORDER BY rc.sort_no, rc.room_category_id SEPARATOR ',') AS roomTypeIdsText,
+            GROUP_CONCAT(DISTINCT rc.name ORDER BY rc.sort_no, rc.room_category_id SEPARATOR ',') AS roomTypeNamesText
+        FROM room_tag rt
+        LEFT JOIN room_category_tag_rel rctr ON rctr.tag_id = rt.tag_id
+            AND rctr.camp_id = rt.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = rctr.room_category_id
+            AND rc.camp_id = rt.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE rt.camp_id = #{campId}
+          AND rt.status = 1
+          AND rt.is_deleted = 0
+        <if test="poiId != null">
+          AND (rc.poi_id = #{poiId} OR rc.room_category_id IS NULL)
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND rt.tag_name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        GROUP BY rt.tag_id, rt.tag_name, rt.tag_type, rt.sort_no
+        ORDER BY rt.sort_no ASC, rt.tag_id ASC
+    </select>
+
+    <select id="selectRoomTypeOptions" resultType="com.jeez.zp.room.mapper.RoomTypeOptionRow">
+        SELECT
+            rc.room_category_id AS id,
+            rc.poi_id AS poiId,
+            rc.name AS name
+        FROM room_category rc
+        WHERE rc.camp_id = #{campId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        <if test="poiId != null">
+          AND rc.poi_id = #{poiId}
+        </if>
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC
+    </select>
+</mapper>

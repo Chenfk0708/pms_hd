@@ -96,6 +96,7 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
                         null,
                         parseLongList(channelIds)
                 ).stream()
+                .filter(this::hasChannel)
                 .map(row -> toChannelRow(row, startDate, resolvedDays))
                 .toList();
 
@@ -105,6 +106,55 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
         response.setList(pageSlice.items());
         response.setPageX(toPageX(pageSlice, resolvedPageNum, resolvedPageSize));
         return response;
+    }
+
+
+    @Override
+    public RoomCategoryCentralStatusResponseVO getRetailStatuses(
+            Long campId,
+            Long userId,
+            List<String> roomCategoryIds,
+            List<String> poiIds,
+            String date,
+            Integer days,
+            Integer pageNum,
+            Integer pageSize
+    ) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        int resolvedPageNum = normalizePageNum(pageNum);
+        int resolvedPageSize = normalizePageSize(pageSize);
+        LocalDate startDate = resolveStartDate(date);
+        int resolvedDays = normalizeDays(days);
+
+        List<RoomCategoryStatusRoomVO> roomStatusViews = roomCategoryPricingMapper.selectRetailRows(
+                        resolvedCampId,
+                        parseLongList(roomCategoryIds),
+                        parseLongList(poiIds)
+                ).stream()
+                .map(row -> toRetailRoom(row, startDate, resolvedDays))
+                .toList();
+        PageSlice<RoomCategoryStatusRoomVO> pageSlice = pageSlice(roomStatusViews, resolvedPageNum, resolvedPageSize);
+
+        RoomCategoryCentralStatusResponseVO response = new RoomCategoryCentralStatusResponseVO();
+        response.setRoomStatusViews(pageSlice.items());
+        response.setPageX(toPageX(pageSlice, resolvedPageNum, resolvedPageSize));
+        return response;
+    }
+
+    private RoomCategoryStatusRoomVO toRetailRoom(
+            RoomCategoryPricingRowVO row,
+            LocalDate startDate,
+            int days
+    ) {
+        long basePrice = resolveBasePrice(row);
+        RoomCategoryStatusRoomVO room = new RoomCategoryStatusRoomVO();
+        room.setRoomCategoryId(row.getRoomCategoryId());
+        room.setRoomCategoryName(row.getRoomCategoryName());
+        room.setNormalPrice(basePrice);
+        room.setNormalActualSalePrice(basePrice);
+        room.setStatusViews(buildRetailDayViews(row, startDate, days, basePrice));
+        room.setChannelRoomCategoryStatuses(List.of());
+        return room;
     }
 
     private RoomCategoryStatusRoomVO toCentralRoom(
@@ -123,6 +173,7 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
         room.setNormalActualSalePrice(basePrice);
         room.setStatusViews(dayViews);
         room.setChannelRoomCategoryStatuses(groupRows.stream()
+                .filter(this::hasChannel)
                 .map(row -> toNestedChannelStatus(row, startDate, days, basePrice))
                 .toList());
         return room;
@@ -162,6 +213,47 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
         channelRow.setNormalActualSalePrice(basePrice);
         channelRow.setStatusViews(buildDayViews(startDate, days, basePrice, basePrice));
         return channelRow;
+    }
+
+    private boolean hasChannel(RoomCategoryPricingRowVO row) {
+        return row.getChannelId() != null && !row.getChannelId().isBlank();
+    }
+
+
+    private List<RoomCategoryStatusDayVO> buildRetailDayViews(
+            RoomCategoryPricingRowVO row,
+            LocalDate startDate,
+            int days,
+            long fallbackPrice
+    ) {
+        Map<String, Long> pricesByDate = parseStatusPrices(row.getStatusPricesText());
+        List<RoomCategoryStatusDayVO> dayViews = new ArrayList<>();
+        for (int index = 0; index < days; index++) {
+            LocalDate current = startDate.plusDays(index);
+            long price = pricesByDate.getOrDefault(current.format(DATE_FORMATTER), fallbackPrice);
+            RoomCategoryStatusDayVO dayView = new RoomCategoryStatusDayVO();
+            dayView.setDate(current.format(DATE_FORMATTER));
+            dayView.setTotalStock(DEFAULT_STOCK);
+            dayView.setPrice(price);
+            dayView.setSalePrice(price);
+            dayViews.add(dayView);
+        }
+        return dayViews;
+    }
+
+    private Map<String, Long> parseStatusPrices(String statusPricesText) {
+        Map<String, Long> pricesByDate = new LinkedHashMap<>();
+        if (statusPricesText == null || statusPricesText.isBlank()) {
+            return pricesByDate;
+        }
+        for (String item : statusPricesText.split(",")) {
+            String[] parts = item.split(":", 2);
+            if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+                continue;
+            }
+            pricesByDate.put(parts[0], Long.valueOf(parts[1]));
+        }
+        return pricesByDate;
     }
 
     private List<RoomCategoryStatusDayVO> buildDayViews(LocalDate startDate, int days, long price, long salePrice) {

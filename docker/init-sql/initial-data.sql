@@ -3994,3 +3994,24 @@ SET character_set_client = @saved_cs_client;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2026-02-26 23:59:01
+
+--
+-- PMS workspace memo extension
+--
+
+CREATE TABLE IF NOT EXISTS `workspace_memo` (
+  `memo_id` bigint NOT NULL COMMENT '备忘录ID',
+  `camp_id` bigint NOT NULL COMMENT '门店ID',
+  `user_id` bigint NOT NULL COMMENT '创建用户ID',
+  `content` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '备忘录内容',
+  `is_handle` tinyint NOT NULL DEFAULT '0' COMMENT '处理状态：0待处理 1已处理',
+  `handled_at` datetime DEFAULT NULL COMMENT '处理时间',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人',
+  `updated_by` bigint DEFAULT NULL COMMENT '更新人',
+  `is_deleted` tinyint NOT NULL DEFAULT '0' COMMENT '是否删除',
+  PRIMARY KEY (`memo_id`),
+  KEY `idx_workspace_memo_camp_handle` (`camp_id`,`is_handle`,`is_deleted`,`created_at`),
+  KEY `idx_workspace_memo_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工作台备忘录';

@@ -26,4 +26,14 @@ public interface RoomCategoryStatusService {
             Integer pageNum,
             Integer pageSize
     );
+    RoomCategoryCentralStatusResponseVO getRetailStatuses(
+            Long campId,
+            Long userId,
+            List<String> roomCategoryIds,
+            List<String> poiIds,
+            String date,
+            Integer days,
+            Integer pageNum,
+            Integer pageSize
+    );
 }

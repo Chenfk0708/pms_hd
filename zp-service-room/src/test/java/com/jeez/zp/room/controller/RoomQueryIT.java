@@ -123,6 +123,100 @@ class RoomQueryIT {
                 .andExpect(jsonPath("$.timestamp").exists());
     }
 
+    @Test
+    @Timeout(60)
+    void roomsPageGet_shouldReturnFlatPagedRoomOptionsForFrontendFilters() throws Exception {
+        insertRoomCategory(102901L, "TDD房型筛选A", 10);
+        insertRoomCategory(102902L, "TDD房型筛选B", 20);
+        insertFloor(102911L, "12F", 12);
+        insertRoom(102921L, 102901L, 102911L, "TDD-1201", "online", "normal", "clean", 1, 1, 0);
+        insertRoom(102922L, 102901L, 102911L, "TDD-1202", "online", "normal", "dirty", 2, 1, 0);
+        insertRoom(102923L, 102902L, 102911L, "OTHER-1203", "online", "normal", "clean", 3, 1, 0);
+        insertRoom(102924L, 102901L, 102911L, "TDD-OFFLINE", "offline", "normal", "clean", 4, 1, 0);
+        insertRoom(102925L, 102901L, 102911L, "TDD-DELETED", "online", "normal", "clean", 5, 0, 0);
+
+        mockMvc.perform(post("/rooms/page/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "isAvailability":1,
+                                  "pageNum":1,
+                                  "pageSize":1,
+                                  "saleType":1,
+                                  "keyword":"TDD-12"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.size").value(1))
+                .andExpect(jsonPath("$.data.current").value(1))
+                .andExpect(jsonPath("$.data.pageNum").value(1))
+                .andExpect(jsonPath("$.data.pageSize").value(1))
+                .andExpect(jsonPath("$.data.hasNextPage").value(true))
+                .andExpect(jsonPath("$.data.pages").value(2))
+                .andExpect(jsonPath("$.data.list.length()").value(1))
+                .andExpect(jsonPath("$.data.list[0].roomId").value("102921"))
+                .andExpect(jsonPath("$.data.list[0].id").value("102921"))
+                .andExpect(jsonPath("$.data.list[0].roomName").value("TDD-1201"))
+                .andExpect(jsonPath("$.data.list[0].name").value("TDD-1201"))
+                .andExpect(jsonPath("$.data.list[0].roomCategoryId").value("102901"))
+                .andExpect(jsonPath("$.data.list[0].roomCategoryName").value("TDD房型筛选A"))
+                .andExpect(jsonPath("$.data.list[0].floorId").value("102911"))
+                .andExpect(jsonPath("$.data.list[0].floorName").value("12F"));
+    }
+
+    @Test
+    @Timeout(60)
+    void roomStatusesRoomsGet_shouldReturnMonthlyRoomCategoryRoomsShape() throws Exception {
+        insertRoomCategory(103001L, "TDD月房态A", 10);
+        insertRoomCategory(103002L, "TDD月房态B", 20);
+        insertFloor(103011L, "13F", 13);
+        insertRoom(103021L, 103001L, 103011L, "M-1301", "online", "normal", "clean", 1, 1, 0);
+        insertRoom(103022L, 103001L, 103011L, "M-1302", "online", "normal", "dirty", 2, 1, 0);
+        insertRoom(103023L, 103002L, 103011L, "M-2301", "online", "normal", "clean", 1, 1, 0);
+        insertRoom(103024L, 103001L, 103011L, "M-OFFLINE", "offline", "normal", "clean", 3, 1, 0);
+        insertRoomStatusDaily(103031L, 103001L, "2026-05-20", 2);
+        insertRoomStatusDaily(103032L, 103002L, "2026-05-20", 1);
+
+        mockMvc.perform(post("/roomStatuses/rooms/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "startDate":"2026-05-20",
+                                  "days":7,
+                                  "roomCategoryIds":["103001"],
+                                  "page":1,
+                                  "pageSize":20
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.data.isSingleInventory").value(0))
+                .andExpect(jsonPath("$.data.list.length()").value(1))
+                .andExpect(jsonPath("$.data.list[0].campId").value("10001"))
+                .andExpect(jsonPath("$.data.list[0].storeId").value("11001"))
+                .andExpect(jsonPath("$.data.list[0].storeName").exists())
+                .andExpect(jsonPath("$.data.list[0].roomCategoryId").value("103001"))
+                .andExpect(jsonPath("$.data.list[0].roomCategoryName").value("TDD月房态A"))
+                .andExpect(jsonPath("$.data.list[0].rooms.length()").value(2))
+                .andExpect(jsonPath("$.data.list[0].rooms[0].roomId").value("103021"))
+                .andExpect(jsonPath("$.data.list[0].rooms[0].roomName").value("M-1301"))
+                .andExpect(jsonPath("$.data.list[0].rooms[1].roomId").value("103022"))
+                .andExpect(jsonPath("$.data.pagination.page").value(1))
+                .andExpect(jsonPath("$.data.pagination.pageSize").value(20))
+                .andExpect(jsonPath("$.data.pagination.total").value(1));
+    }
     private void insertRoomCategory(long roomCategoryId, String name, int sortNo) {
         jdbcTemplate.update("""
                         INSERT INTO room_category (
@@ -213,4 +307,48 @@ class RoomQueryIT {
                 isDeleted
         );
     }
+    private void insertRoomStatusDaily(long id, long roomCategoryId, String bizDate, int availabilityCount) {
+        jdbcTemplate.update("""
+                        INSERT INTO room_status_daily (
+                            id,
+                            camp_id,
+                            poi_id,
+                            biz_date,
+                            room_category_id,
+                            availability_count,
+                            open_room_count,
+                            room_sale_count,
+                            close_room_count,
+                            user_busy_count,
+                            retain_count,
+                            repair_count,
+                            vacant_count,
+                            pre_come_count,
+                            live_count,
+                            pre_leave_count,
+                            clean_count,
+                            dirty_count
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                id,
+                CAMP_ID,
+                POI_ID,
+                bizDate,
+                roomCategoryId,
+                availabilityCount,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                availabilityCount,
+                0,
+                0,
+                0,
+                availabilityCount,
+                0
+        );
+    }
 }
+

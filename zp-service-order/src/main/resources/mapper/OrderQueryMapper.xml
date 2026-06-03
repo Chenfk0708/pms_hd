@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.order.mapper.OrderQueryMapper">
+
+    <select id="selectHouseOrders" resultType="com.jeez.zp.order.vo.OrderQueryRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            om.out_order_no AS outOrderId,
+            COALESCE(CAST(ca.channel_id AS CHAR), '0') AS channelId,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '自来客') AS channelName,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '自来客') AS orderChannelName,
+            om.order_type AS orderType,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            CAST(om.poi_id AS CHAR) AS poiId,
+            CAST(om.room_category_id AS CHAR) AS roomCategoryId,
+            CAST(om.room_id AS CHAR) AS roomId,
+            om.status AS status,
+            om.payment_status AS paymentStatus,
+            CAST(om.payment_way_id AS CHAR) AS paymentWayId,
+            pw.payment_way_name AS paymentWayName,
+            om.total_price_cent AS totalPriceCent,
+            om.total_pay_price_cent AS totalPayPriceCent,
+            om.refund_price_cent AS refundPriceCent,
+            COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) AS commissionPriceCent,
+            om.deposit_price_cent AS depositPriceCent,
+            om.other_price_cent AS otherPriceCent,
+            COALESCE(om.channel_order_no_snapshot, om.out_order_no, om.order_no) AS confirmNo,
+            om.created_at AS createdAt,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            COALESCE(poi.poi_name, om.poi_name_snapshot) AS poiName,
+            COALESCE(rc.name, om.room_category_name_snapshot) AS roomCategoryName,
+            COALESCE(gm.name, om.stay_type_snapshot, '全日房') AS roomCategoryProductName,
+            COALESCE(r.room_name, om.room_name_snapshot) AS roomName,
+            om.contract_no AS contractNo,
+            om.next_payment_amount_cent AS nextPaymentAmountCent,
+            CAST(om.next_payment_date AS DATETIME) AS nextPaymentDate,
+            om.payment_cycle AS paymentCycle
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN distribution_order do ON do.source_order_id = om.order_id
+            AND do.camp_id = om.camp_id
+            AND do.channel_id = om.channel_id
+        LEFT JOIN pms_poi poi ON poi.poi_id = om.poi_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        LEFT JOIN room r ON r.room_id = om.room_id
+        LEFT JOIN goods_main gm ON gm.goods_id = om.goods_id
+            AND gm.camp_id = om.camp_id
+            AND gm.is_deleted = 0
+        LEFT JOIN payment_way pw ON pw.payment_way_id = om.payment_way_id
+            AND pw.camp_id = om.camp_id
+            AND pw.is_deleted = 0
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+        <if test="keyword != null and keyword != ''">
+            AND (
+                CAST(om.order_id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                OR om.order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.out_order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_name LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_mobile LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(gm.name, om.stay_type_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(rc.name, om.room_category_name_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(r.room_name, om.room_name_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(poi.poi_name, om.poi_name_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(ca.channel_name, om.source_label_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        ORDER BY om.created_at DESC, om.order_id DESC
+    </select>
+
+    <select id="selectWorkspaceOrders" resultType="com.jeez.zp.order.vo.WorkspaceOrderListRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '未知渠道') AS channelName,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            COALESCE(rc.name, om.room_category_name_snapshot) AS roomCategoryName,
+            COALESCE(r.room_name, om.room_name_snapshot) AS roomName,
+            om.status AS orderStatus,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.day_num AS dayNum,
+            om.created_at AS createdAt
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        LEFT JOIN room r ON r.room_id = om.room_id
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.order_type = 'daily_room'
+          AND om.status IN ('booked', 'checked_in', 'pending')
+        <if test="keyword != null and keyword != ''">
+            AND (
+                CAST(om.order_id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                OR om.order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.out_order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_name LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_mobile LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(rc.name, om.room_category_name_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(r.room_name, om.room_name_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(ca.channel_name, om.source_label_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        ORDER BY om.start_at ASC, om.created_at ASC, om.order_id ASC
+    </select>
+
+    <select id="selectOrderDetail" resultType="com.jeez.zp.order.vo.OrderDetailRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            om.order_no AS orderNo,
+            om.out_order_no AS outOrderId,
+            om.order_type AS orderType,
+            om.status AS status,
+            om.payment_status AS paymentStatus,
+            COALESCE(CAST(ca.channel_id AS CHAR), '0') AS channelId,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '自来客') AS channelName,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            CAST(om.poi_id AS CHAR) AS poiId,
+            COALESCE(poi.poi_name, om.poi_name_snapshot) AS poiName,
+            CAST(om.room_category_id AS CHAR) AS roomCategoryId,
+            COALESCE(rc.name, om.room_category_name_snapshot) AS roomCategoryName,
+            CAST(om.room_id AS CHAR) AS roomId,
+            COALESCE(r.room_name, om.room_name_snapshot) AS roomName,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.day_num AS dayNum,
+            om.total_price_cent AS totalPriceCent,
+            om.total_pay_price_cent AS totalPayPriceCent,
+            om.refund_price_cent AS refundPriceCent,
+            COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) AS commissionPriceCent,
+            CAST(om.payment_way_id AS CHAR) AS paymentWayId,
+            pw.payment_way_name AS paymentWayName,
+            om.remark AS remark,
+            om.created_at AS createdAt
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN distribution_order do ON do.source_order_id = om.order_id
+            AND do.camp_id = om.camp_id
+            AND do.channel_id = om.channel_id
+        LEFT JOIN pms_poi poi ON poi.poi_id = om.poi_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        LEFT JOIN room r ON r.room_id = om.room_id
+        LEFT JOIN payment_way pw ON pw.payment_way_id = om.payment_way_id
+            AND pw.camp_id = om.camp_id
+            AND pw.is_deleted = 0
+        WHERE om.camp_id = #{campId}
+          AND om.order_id = #{orderId}
+          AND om.is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectOrderGuests" resultType="com.jeez.zp.order.vo.OrderGuestVO">
+        SELECT
+            CAST(og.id AS CHAR) AS guestId,
+            og.guest_name AS guestName,
+            og.guest_mobile AS guestMobile,
+            og.guest_id_card_type AS guestIdCardType,
+            og.guest_id_card AS guestIdCard,
+            og.guest_type AS guestType
+        FROM order_guest og
+        WHERE og.order_id = #{orderId}
+        ORDER BY og.id ASC
+    </select>
+
+    <select id="selectOrderPaymentRecords" resultType="com.jeez.zp.order.vo.OrderPaymentRecordRowVO">
+        SELECT
+            CAST(opr.order_payment_record_id AS CHAR) AS paymentRecordId,
+            CAST(opr.payment_type_id AS CHAR) AS paymentTypeId,
+            CAST(opr.payment_way_id AS CHAR) AS paymentWayId,
+            pw.payment_way_name AS paymentWayName,
+            opr.is_income AS isIncome,
+            opr.amount_cent AS amount,
+            opr.debt_amount_cent AS debtAmount,
+            opr.payment_no AS paymentNo,
+            opr.payment_time AS paymentTime,
+            opr.operator_name AS operatorName,
+            opr.remark AS remark
+        FROM order_payment_record opr
+        LEFT JOIN payment_way pw ON pw.payment_way_id = opr.payment_way_id
+            AND pw.camp_id = opr.camp_id
+            AND pw.is_deleted = 0
+        WHERE opr.camp_id = #{campId}
+          AND opr.order_id = #{orderId}
+        ORDER BY opr.payment_time ASC, opr.order_payment_record_id ASC
+    </select>
+
+    <select id="selectStrongReminderRows" resultType="com.jeez.zp.order.vo.StrongReminderRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            CAST(om.camp_id AS CHAR) AS campId,
+            om.order_no AS orderNo,
+            om.status AS status,
+            om.payment_status AS paymentStatus,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            COALESCE(rc.name, om.room_category_name_snapshot) AS roomCategoryName,
+            COALESCE(r.room_name, om.room_name_snapshot) AS roomName,
+            CAST(COALESCE(ca.channel_id, 0) AS CHAR) AS channelId,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '') AS channelName,
+            om.start_at AS startAt,
+            om.created_at AS createdAt
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        LEFT JOIN room r ON r.room_id = om.room_id
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.status IN ('pending', 'refunding', 'cancelled', 'refunded')
+        <if test="keyword != null and keyword != ''">
+            AND (
+                CAST(om.order_id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                OR om.order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.out_order_no LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_name LIKE CONCAT('%', #{keyword}, '%')
+                OR om.guest_mobile LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(rc.name, om.room_category_name_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(r.room_name, om.room_name_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+                OR COALESCE(ca.channel_name, om.source_label_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        ORDER BY
+            CASE om.status
+                WHEN 'pending' THEN 0
+                WHEN 'refunding' THEN 1
+                ELSE 2
+            END,
+            om.created_at ASC,
+            om.order_id ASC
+    </select>
+</mapper>

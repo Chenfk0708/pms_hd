@@ -57,7 +57,10 @@ public class WeiRoomCategoryServiceImpl implements WeiRoomCategoryService {
 
         List<WeiRoomCategoryCatalogRowVO> filteredRows = rows.stream()
                 .filter(row -> matchesGoodsTypes(resolveGoodsTypeCode(row.getRawGoodsType()), goodsTypes))
-                .sorted((left, right) -> Long.compare(left.getGoodsId(), right.getGoodsId()))
+                .sorted((left, right) -> {
+                    int sortCompare = Integer.compare(defaultSortNo(left.getSortNo()), defaultSortNo(right.getSortNo()));
+                    return sortCompare != 0 ? sortCompare : Long.compare(left.getGoodsId(), right.getGoodsId());
+                })
                 .toList();
 
         long total = filteredRows.size();
@@ -260,6 +263,10 @@ public class WeiRoomCategoryServiceImpl implements WeiRoomCategoryService {
 
     private long defaultLong(Long value) {
         return value == null ? 0L : value;
+    }
+
+    private int defaultSortNo(Integer value) {
+        return value == null ? Integer.MAX_VALUE : value;
     }
 
     private String defaultString(String value) {

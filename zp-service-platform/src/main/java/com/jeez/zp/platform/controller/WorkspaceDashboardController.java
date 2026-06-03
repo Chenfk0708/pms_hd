@@ -4,6 +4,8 @@ import com.jeez.zp.platform.api.HudsonResponse;
 import com.jeez.zp.platform.api.TraceIdFactory;
 import com.jeez.zp.platform.dto.request.CampIdRequest;
 import com.jeez.zp.platform.dto.request.WorkspaceAccommodationAnalysisRequest;
+import com.jeez.zp.platform.dto.request.WorkspaceMemoCreateRequest;
+import com.jeez.zp.platform.dto.request.WorkspaceMemoHandleRequest;
 import com.jeez.zp.platform.dto.request.WorkspaceMemoPageRequest;
 import com.jeez.zp.platform.dto.request.WorkspaceOrdersRequest;
 import com.jeez.zp.platform.security.LoginUserContext;
@@ -12,6 +14,7 @@ import com.jeez.zp.platform.vo.WorkspaceAccommodationAnalysisVO;
 import com.jeez.zp.platform.vo.WorkspaceBacklogItemVO;
 import com.jeez.zp.platform.vo.WorkspaceCampFlowVO;
 import com.jeez.zp.platform.vo.WorkspaceHomePageVO;
+import com.jeez.zp.platform.vo.WorkspaceMemoItemVO;
 import com.jeez.zp.platform.vo.WorkspaceMemoPageResponseVO;
 import com.jeez.zp.platform.vo.WorkspaceOrdersResponseVO;
 import lombok.RequiredArgsConstructor;
@@ -82,9 +85,35 @@ public class WorkspaceDashboardController {
                         request.getPage(),
                         request.getPageNum(),
                         request.getCurrent(),
-                        request.getPageSize()
+                        request.getPageSize(),
+                        request.getIsHandle()
                 ),
                 TraceIdFactory.next("memo-page-get")
+        );
+    }
+
+    @PostMapping("/memo/add")
+    public HudsonResponse<WorkspaceMemoItemVO> addMemo(@RequestBody WorkspaceMemoCreateRequest request) {
+        return HudsonResponse.success(
+                workspaceDashboardService.addMemo(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getContent()
+                ),
+                TraceIdFactory.next("memo-add")
+        );
+    }
+
+    @PostMapping("/memo/handle")
+    public HudsonResponse<WorkspaceMemoItemVO> handleMemo(@RequestBody WorkspaceMemoHandleRequest request) {
+        return HudsonResponse.success(
+                workspaceDashboardService.handleMemo(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        parseLong(request.getMemoId()),
+                        request.getIsHandle()
+                ),
+                TraceIdFactory.next("memo-handle")
         );
     }
 

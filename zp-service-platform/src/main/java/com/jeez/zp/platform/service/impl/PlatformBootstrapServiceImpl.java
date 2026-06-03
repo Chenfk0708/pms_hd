@@ -1,6 +1,7 @@
 package com.jeez.zp.platform.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jeez.zp.platform.dto.request.VersionSubscriptionOrderSubmitRequest;
 import com.jeez.zp.platform.exception.BusinessException;
 import com.jeez.zp.platform.mapper.PlatformBootstrapMapper;
 import com.jeez.zp.platform.service.PlatformBootstrapService;
@@ -16,11 +17,13 @@ import com.jeez.zp.platform.vo.MenuProjectVO;
 import com.jeez.zp.platform.vo.SystemConfigItemVO;
 import com.jeez.zp.platform.vo.SystemConfigsResponseVO;
 import com.jeez.zp.platform.vo.UserOwnVO;
+import com.jeez.zp.platform.vo.VersionSubscriptionOrderSubmitVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +37,7 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
     private static final long DEFAULT_PROJECT_MENU_ID = 1L;
     private static final String DEFAULT_MENU_ID = "1848317056370487297";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter ORDER_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final PlatformBootstrapMapper platformBootstrapMapper;
     private final ObjectMapper objectMapper;
@@ -209,6 +213,20 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
         return response;
     }
 
+    @Override
+    public VersionSubscriptionOrderSubmitVO submitVersionSubscriptionOrder(VersionSubscriptionOrderSubmitRequest request, Long userId) {
+        Long resolvedCampId = resolveAccessibleCampId(parseLong(request == null ? null : request.getCampId()), userId);
+        String editionId = requireText(request == null ? null : request.getEditionId(), "editionId 不能为空");
+        String duration = requireSupportedDuration(request == null ? null : request.getDuration());
+        EditionPlan editionPlan = resolveEditionPlan(editionId);
+
+        VersionSubscriptionOrderSubmitVO response = new VersionSubscriptionOrderSubmitVO();
+        response.setMessage(editionPlan.displayName + "购买信息已生成");
+        response.setRedirectTo("/version/applicationPayment/detail?plan=" + editionPlan.planId + "&duration=" + duration);
+        response.setOrderNo(buildVersionSubscriptionOrderNo(resolvedCampId));
+        return response;
+    }
+
     private CurrentUserBundleVO requireUserBundle(Long userId) {
         CurrentUserBundleVO bundle = platformBootstrapMapper.selectCurrentUserBundle(userId);
         if (bundle == null) {
@@ -222,6 +240,58 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
             return campId;
         }
         return requireUserBundle(userId).getCampId();
+    }
+
+    private Long resolveAccessibleCampId(Long requestedCampId, Long userId) {
+        CurrentUserBundleVO bundle = requireUserBundle(userId);
+        if (requestedCampId == null) {
+            return bundle.getCampId();
+        }
+        if (!Objects.equals(requestedCampId, bundle.getCampId())) {
+            throw new BusinessException(40301, "无权访问当前门店版本订阅数据");
+        }
+        return requestedCampId;
+    }
+
+    private String requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(40001, message);
+        }
+        return value.trim();
+    }
+
+    private String requireSupportedDuration(String duration) {
+        String normalizedDuration = requireText(duration, "duration 不能为空");
+        if (!List.of("1y", "2y", "forever").contains(normalizedDuration)) {
+            throw new BusinessException(40002, "不支持的版本订阅时长");
+        }
+        return normalizedDuration;
+    }
+
+    private EditionPlan resolveEditionPlan(String editionId) {
+        return switch (editionId) {
+            case "1" -> new EditionPlan("standard", "标准版");
+            case "9" -> new EditionPlan("delight", "畅享版");
+            case "2" -> new EditionPlan("advanced", "高级版");
+            case "3" -> new EditionPlan("professional", "专业版");
+            case "4" -> new EditionPlan("flagship", "旗舰版");
+            case "5" -> new EditionPlan("custom", "定制版");
+            default -> new EditionPlan("custom", "版本订阅");
+        };
+    }
+
+    private String buildVersionSubscriptionOrderNo(Long campId) {
+        return "VS" + LocalDateTime.now().format(ORDER_NO_FORMATTER) + campId;
+    }
+
+    private Long parseLong(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return Long.valueOf(value);
+    }
+
+    private record EditionPlan(String planId, String displayName) {
     }
 
     private Object parseJsonIfPossible(Object rawValue) {

@@ -2,6 +2,7 @@ package com.jeez.zp.platform.vo;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Data
@@ -57,9 +58,33 @@ public class RoomCategoryPageItemVO {
     private String roomCategoryGroupId;
     private String roomCategoryGroupName;
     private String displayName;
+    private String locationMode;
+    private String locationProvinceCode;
+    private String locationProvinceName;
+    private String locationCityCode;
+    private String locationCityName;
+    private String locationDistrictCode;
+    private String locationDistrictName;
+    private String streetAddress;
+    private String communityName;
+    private String buildingUnit;
+    private String doorNumber;
+    private BigDecimal locationLatitude;
+    private BigDecimal locationLongitude;
+    private String rentalType;
+    private String propertyType;
+    private BigDecimal suiteArea;
+    private Integer bedroomCount;
+    private Integer livingRoomCount;
+    private Integer kitchenCount;
+    private Integer bathroomCount;
+    private String bathroomType;
     private Integer earliestCheckInTime;
     private Integer latestCheckInTime;
     private Integer latestCheckOutTime;
+    private String selectedFacilityIds;
+    private String bedSheetChangePolicy;
+    private String decorationStyle;
     private String highlightDescription;
     private String nearbyDescription;
     private String articleDescription;

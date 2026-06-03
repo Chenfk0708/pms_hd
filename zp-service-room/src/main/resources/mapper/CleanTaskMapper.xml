@@ -51,6 +51,59 @@
         ORDER BY ct.deadline_at DESC, ct.clean_task_id DESC
     </select>
 
+    <select id="selectTaskRowsByRange" resultType="com.jeez.zp.room.vo.CleanTaskQueryRowVO">
+        SELECT
+            CAST(ct.clean_task_id AS CHAR) AS taskId,
+            p.poi_name AS poiName,
+            rc.name AS roomCategoryName,
+            r.room_name AS roomName,
+            CAST(ct.clean_staff_id AS CHAR) AS cleanerId,
+            cs.name AS cleanerName,
+            ct.task_type AS taskType,
+            ct.task_status AS taskStatus,
+            COALESCE(ct.remark, '') AS remark,
+            ct.deadline_at AS deadlineAt
+        FROM clean_task ct
+        JOIN pms_poi p ON p.poi_id = ct.poi_id
+            AND p.camp_id = ct.camp_id
+            AND p.status = 1
+            AND p.is_deleted = 0
+        JOIN room r ON r.room_id = ct.room_id
+            AND r.camp_id = ct.camp_id
+            AND r.status = 1
+            AND r.is_deleted = 0
+        JOIN room_category rc ON rc.room_category_id = ct.room_category_id
+            AND rc.camp_id = ct.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        LEFT JOIN clean_staff cs ON cs.clean_staff_id = ct.clean_staff_id
+            AND cs.camp_id = ct.camp_id
+            AND cs.is_deleted = 0
+        WHERE ct.camp_id = #{campId}
+        <if test="poiId != null">
+            AND ct.poi_id = #{poiId}
+        </if>
+        <if test="roomIds != null and roomIds.size() > 0">
+            AND ct.room_id IN
+            <foreach collection="roomIds" item="roomId" open="(" separator="," close=")">
+                #{roomId}
+            </foreach>
+        </if>
+        <if test="cleanerIds != null and cleanerIds.size() > 0">
+            AND ct.clean_staff_id IN
+            <foreach collection="cleanerIds" item="cleanerId" open="(" separator="," close=")">
+                #{cleanerId}
+            </foreach>
+        </if>
+        <if test="startTime != null">
+            AND ct.deadline_at &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND ct.deadline_at &lt;= #{endTime}
+        </if>
+        ORDER BY ct.deadline_at ASC, ct.clean_task_id ASC
+    </select>
+
     <select id="selectStores" resultType="com.jeez.zp.room.vo.CleanTaskOptionVO">
         SELECT
             CAST(p.poi_id AS CHAR) AS id,
@@ -87,4 +140,137 @@
           AND cs.status = 1
         ORDER BY cs.clean_staff_id ASC
     </select>
+
+    <select id="selectCleanerPageRows" resultType="com.jeez.zp.room.vo.CleanerPageQueryRowVO">
+        SELECT
+            CAST(cs.clean_staff_id AS CHAR) AS cleanerId,
+            cs.name AS cleanerName,
+            COALESCE(cs.mobile, '') AS mobile,
+            cs.status AS rawStatus,
+            COALESCE(CAST(MAX(ct.poi_id) AS CHAR), '') AS poiId,
+            COALESCE(GROUP_CONCAT(DISTINCT p.poi_name ORDER BY p.sort_no, p.poi_id SEPARATOR '、'), '') AS poiName,
+            COALESCE(GROUP_CONCAT(DISTINCT rc.name ORDER BY rc.sort_no, rc.room_category_id SEPARATOR ','), '') AS roomScopesText,
+            COUNT(ct.clean_task_id) AS todayTaskNum,
+            SUM(CASE WHEN ct.task_status = 'done' THEN 1 ELSE 0 END) AS completedTaskNum,
+            SUM(CASE WHEN ct.task_status &lt;&gt; 'done' AND ct.deadline_at &lt; NOW() THEN 1 ELSE 0 END) AS overdueTaskNum,
+            DATE_FORMAT(MAX(ct.deadline_at), '%Y-%m-%d %H:%i') AS lastTaskTime
+        FROM clean_staff cs
+        LEFT JOIN clean_task ct ON ct.clean_staff_id = cs.clean_staff_id
+            AND ct.camp_id = cs.camp_id
+        <if test="serviceDate != null">
+            AND DATE(ct.deadline_at) = #{serviceDate}
+        </if>
+        <if test="poiId != null">
+            AND ct.poi_id = #{poiId}
+        </if>
+        LEFT JOIN pms_poi p ON p.poi_id = ct.poi_id
+            AND p.camp_id = ct.camp_id
+            AND p.status = 1
+            AND p.is_deleted = 0
+        LEFT JOIN room_category rc ON rc.room_category_id = ct.room_category_id
+            AND rc.camp_id = ct.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE cs.camp_id = #{campId}
+          AND cs.is_deleted = 0
+        <if test="keyword != null and keyword != ''">
+          AND (
+              cs.name LIKE CONCAT('%', #{keyword}, '%')
+              OR cs.mobile LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        GROUP BY cs.clean_staff_id, cs.name, cs.mobile, cs.status
+        <if test="poiId != null">
+        HAVING COUNT(ct.clean_task_id) &gt; 0
+        </if>
+        ORDER BY cs.status DESC, cs.clean_staff_id ASC
+    </select>
+
+    <select id="selectRoomForTask" resultType="com.jeez.zp.room.vo.CleanTaskRoomRowVO">
+        SELECT
+            r.room_id AS roomId,
+            r.poi_id AS poiId,
+            r.room_category_id AS roomCategoryId
+        FROM room r
+        JOIN pms_poi p ON p.poi_id = r.poi_id
+            AND p.camp_id = r.camp_id
+            AND p.status = 1
+            AND p.is_deleted = 0
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.room_id = #{roomId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+        <if test="poiId != null">
+          AND r.poi_id = #{poiId}
+        </if>
+        LIMIT 1
+    </select>
+
+    <select id="countCleaner" resultType="int">
+        SELECT COUNT(*)
+        FROM clean_staff cs
+        WHERE cs.camp_id = #{campId}
+          AND cs.clean_staff_id = #{cleanStaffId}
+          AND cs.status = 1
+          AND cs.is_deleted = 0
+    </select>
+
+    <insert id="insertCleanTask">
+        INSERT INTO clean_task (
+            clean_task_id,
+            camp_id,
+            poi_id,
+            room_id,
+            room_category_id,
+            clean_staff_id,
+            task_type,
+            task_status,
+            deadline_at,
+            notify_count,
+            remark,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{cleanTaskId},
+            #{campId},
+            #{poiId},
+            #{roomId},
+            #{roomCategoryId},
+            #{cleanStaffId},
+            #{taskType},
+            #{taskStatus},
+            #{deadlineAt},
+            0,
+            #{remark},
+            NOW(),
+            NOW()
+        )
+    </insert>
+
+    <select id="selectTaskIds" resultType="string">
+        SELECT CAST(ct.clean_task_id AS CHAR)
+        FROM clean_task ct
+        WHERE ct.camp_id = #{campId}
+          AND ct.clean_task_id IN
+          <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">
+              #{taskId}
+          </foreach>
+        ORDER BY ct.clean_task_id ASC
+    </select>
+
+    <update id="incrementNotifyCount">
+        UPDATE clean_task
+        SET notify_count = notify_count + 1,
+            updated_at = NOW()
+        WHERE camp_id = #{campId}
+          AND task_status NOT IN ('done', 'cancelled')
+          AND clean_task_id IN
+          <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">
+              #{taskId}
+          </foreach>
+    </update>
 </mapper>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.EditionReplaceOrderMapper">
+
+    <select id="selectReplaceOrderRows" resultType="com.jeez.zp.platform.vo.EditionReplaceOrderQueryRowVO">
+        SELECT
+            om.order_id AS orderId,
+            om.order_no AS orderNo,
+            om.out_order_no AS outOrderNo,
+            ca.channel_name AS channelName,
+            COALESCE(rc.display_name, rc.name) AS roomCategoryName,
+            r.room_name AS roomName,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            om.status AS orderStatus,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.created_at AS createdAt,
+            COALESCE(om.settlement_amount_cent, 0) AS settlementAmountCent,
+            COALESCE(NULLIF(om.distribution_commission_cent, 0), om.settlement_amount_cent, om.total_pay_price_cent, om.total_price_cent, 0) AS replaceAmountCent,
+            COALESCE(om.remark, '') AS remark
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+            AND rc.camp_id = om.camp_id
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = om.camp_id
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.source_type = 'distribution_replace'
+        <if test="rangeStart != null">
+          AND om.created_at &gt;= #{rangeStart}
+        </if>
+        <if test="rangeEndExclusive != null">
+          AND om.created_at &lt; #{rangeEndExclusive}
+        </if>
+        ORDER BY om.created_at ASC, om.order_id ASC
+    </select>
+</mapper>

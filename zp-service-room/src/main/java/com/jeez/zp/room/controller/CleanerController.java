@@ -3,9 +3,11 @@ package com.jeez.zp.room.controller;
 import com.jeez.zp.room.api.HudsonResponse;
 import com.jeez.zp.room.api.TraceIdFactory;
 import com.jeez.zp.room.dto.request.CleanerListRequest;
+import com.jeez.zp.room.dto.request.CleanerPageRequest;
 import com.jeez.zp.room.security.LoginUserContext;
 import com.jeez.zp.room.service.CleanerService;
 import com.jeez.zp.room.vo.CleanerListItemVO;
+import com.jeez.zp.room.vo.CleanerPageResponseVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,6 +29,14 @@ public class CleanerController {
                         LoginUserContext.requiredUserId()
                 ),
                 TraceIdFactory.next("cleaner-list-get")
+        );
+    }
+
+    @PostMapping("/cleaner/page/get")
+    public HudsonResponse<CleanerPageResponseVO> getPage(@RequestBody CleanerPageRequest request) {
+        return HudsonResponse.success(
+                cleanerService.getPage(request, LoginUserContext.requiredUserId()),
+                TraceIdFactory.next("cleaner-page-get")
         );
     }
 

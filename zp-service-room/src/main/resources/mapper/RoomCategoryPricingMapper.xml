@@ -12,10 +12,10 @@
             ch.channel_name AS channelName,
             commission_info.commission_rate AS commissionRate,
             goods_info.product_name AS productName,
-            goods_info.normal_price AS normalPrice,
-            goods_info.normal_actual_sale_price AS normalActualSalePrice
+            COALESCE(goods_info.normal_price, rc.weekday_price_cent, 0) AS normalPrice,
+            COALESCE(goods_info.normal_actual_sale_price, goods_info.normal_price, rc.weekday_price_cent, 0) AS normalActualSalePrice
         FROM room_category rc
-        JOIN (
+        LEFT JOIN (
             SELECT
                 rel.camp_id AS camp_id,
                 rel.room_category_id AS room_category_id,
@@ -91,4 +91,61 @@
         </if>
         ORDER BY rc.sort_no ASC, rc.room_category_id ASC, ch.sort_account_id ASC, ch.channel_id ASC
     </select>
+
+    <select id="selectRetailRows" resultType="com.jeez.zp.room.vo.RoomCategoryPricingRowVO">
+        SELECT
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName,
+            COALESCE(
+                MAX(CASE WHEN rps.biz_date = (
+                    SELECT MIN(inner_rps.biz_date)
+                    FROM room_price_snapshot inner_rps
+                    WHERE inner_rps.camp_id = rc.camp_id
+                      AND inner_rps.room_category_id = rc.room_category_id
+                      AND inner_rps.price_type = 'retail'
+                      AND inner_rps.channel_id = 0
+                      AND inner_rps.status = 'active'
+                ) THEN rps.price_cent END),
+                rc.weekday_price_cent,
+                0
+            ) AS normalPrice,
+            COALESCE(
+                MAX(CASE WHEN rps.biz_date = (
+                    SELECT MIN(inner_rps.biz_date)
+                    FROM room_price_snapshot inner_rps
+                    WHERE inner_rps.camp_id = rc.camp_id
+                      AND inner_rps.room_category_id = rc.room_category_id
+                      AND inner_rps.price_type = 'retail'
+                      AND inner_rps.channel_id = 0
+                      AND inner_rps.status = 'active'
+                ) THEN rps.price_cent END),
+                rc.weekday_price_cent,
+                0
+            ) AS normalActualSalePrice,
+            GROUP_CONCAT(CONCAT(DATE_FORMAT(rps.biz_date, '%Y-%m-%d'), ':', rps.price_cent) ORDER BY rps.biz_date ASC SEPARATOR ',') AS statusPricesText
+        FROM room_category rc
+        LEFT JOIN room_price_snapshot rps ON rps.camp_id = rc.camp_id
+            AND rps.room_category_id = rc.room_category_id
+            AND rps.price_type = 'retail'
+            AND rps.channel_id = 0
+            AND rps.status = 'active'
+        WHERE rc.camp_id = #{campId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">
+            AND rc.room_category_id IN
+            <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                #{roomCategoryId}
+            </foreach>
+        </if>
+        <if test="poiIds != null and poiIds.size() > 0">
+            AND rc.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        GROUP BY rc.room_category_id, rc.name, rc.weekday_price_cent, rc.sort_no
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC
+    </select>
+
 </mapper>

@@ -1,5 +1,6 @@
 package com.jeez.zp.platform.service.impl;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.jeez.zp.platform.exception.BusinessException;
 import com.jeez.zp.platform.mapper.PlatformBootstrapMapper;
 import com.jeez.zp.platform.mapper.WorkspaceDashboardMapper;
@@ -21,8 +22,10 @@ import com.jeez.zp.platform.vo.WorkspaceOrderListRowVO;
 import com.jeez.zp.platform.vo.WorkspaceOrderOriginItemVO;
 import com.jeez.zp.platform.vo.WorkspaceOrdersResponseVO;
 import com.jeez.zp.platform.vo.WorkspacePaginationVO;
+import com.jeez.zp.platform.vo.WorkspaceProductDynamicRowVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -59,12 +62,13 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
         LocalDateTime nextDayStart = today.plusDays(1).atStartOfDay();
 
         List<WorkspaceDashboardRoomRowVO> roomRows = workspaceDashboardMapper.selectRoomRows(resolvedCampId, dayStart, nextDayStart);
+        List<WorkspaceDashboardOrderRowVO> lifecycleOrderRows = workspaceDashboardMapper.selectLifecycleOrderRows(resolvedCampId, dayStart, nextDayStart);
         List<WorkspaceDashboardOrderRowVO> orderRows = workspaceDashboardMapper.selectOrderRows(resolvedCampId, dayStart, nextDayStart);
 
         WorkspaceHomePageVO response = new WorkspaceHomePageVO();
-        response.setNowPredictCheckIn(count(roomRows, row -> isBooked(row) && isSameDate(row.getCheckInAt(), today)));
-        response.setNowAlreadyCheckIn(count(roomRows, this::isCheckedIn));
-        response.setNowPredictCheckOut(count(roomRows, row -> isCheckedIn(row) && isSameDate(row.getCheckOutAt(), today)));
+        response.setNowPredictCheckIn(countOrders(lifecycleOrderRows, row -> isBooked(row) && isSameDate(row.getStartAt(), today)));
+        response.setNowAlreadyCheckIn(countOrders(lifecycleOrderRows, this::isCheckedIn));
+        response.setNowPredictCheckOut(countOrders(lifecycleOrderRows, row -> isCheckedIn(row) && isSameDate(row.getEndAt(), today)));
         response.setNowOnSaleNum(count(roomRows, this::isOnSale));
         response.setUserBusyRepairNum(count(roomRows, row -> isRepair(row.getLockStatus())));
         response.setDirtyNum(count(roomRows, row -> isDirty(row.getCleanStatus())));
@@ -237,17 +241,48 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
             Integer page,
             Integer pageNum,
             Integer current,
-            Integer pageSize
+            Integer pageSize,
+            Integer isHandle
     ) {
-        resolveAccessibleCampId(campId, userId);
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
         int resolvedPageNum = normalizePageNum(page, pageNum, current);
         int resolvedPageSize = normalizePageSize(pageSize);
+        Integer resolvedIsHandle = normalizeMemoHandleFilter(isHandle);
+        long offset = (long) (resolvedPageNum - 1) * resolvedPageSize;
+        long total = Optional.ofNullable(workspaceDashboardMapper.countWorkspaceMemos(resolvedCampId, resolvedIsHandle)).orElse(0L);
 
         WorkspaceMemoPageResponseVO response = new WorkspaceMemoPageResponseVO();
-        response.setTotal(0L);
-        response.setList(List.<WorkspaceMemoItemVO>of());
-        response.setPagination(toPagination(resolvedPageNum, resolvedPageSize, 0L));
+        response.setTotal(total);
+        response.setList(total == 0
+                ? List.<WorkspaceMemoItemVO>of()
+                : workspaceDashboardMapper.selectWorkspaceMemos(resolvedCampId, resolvedIsHandle, offset, resolvedPageSize));
+        response.setPagination(toPagination(resolvedPageNum, resolvedPageSize, total));
         return response;
+    }
+
+    @Override
+    @Transactional
+    public WorkspaceMemoItemVO addMemo(Long campId, Long userId, String content) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        String normalizedContent = normalizeMemoContent(content);
+        Long memoId = IdWorker.getId();
+        workspaceDashboardMapper.insertWorkspaceMemo(memoId, resolvedCampId, userId, normalizedContent);
+        return workspaceDashboardMapper.selectWorkspaceMemoById(resolvedCampId, memoId);
+    }
+
+    @Override
+    @Transactional
+    public WorkspaceMemoItemVO handleMemo(Long campId, Long userId, Long memoId, Integer isHandle) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        if (memoId == null) {
+            throw new BusinessException(40001, "备忘录ID不能为空");
+        }
+        Integer normalizedIsHandle = normalizeRequiredMemoHandle(isHandle);
+        int affectedRows = workspaceDashboardMapper.updateWorkspaceMemoHandle(resolvedCampId, memoId, userId, normalizedIsHandle);
+        if (affectedRows == 0) {
+            throw new BusinessException(40404, "备忘录不存在");
+        }
+        return workspaceDashboardMapper.selectWorkspaceMemoById(resolvedCampId, memoId);
     }
 
     @Override
@@ -280,6 +315,9 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
                     "查看订单"
             ));
         }
+        workspaceDashboardMapper.selectProductDynamics(resolvedCampId).stream()
+                .map(this::toProductDynamicItem)
+                .forEach(items::add);
         return items;
     }
 
@@ -314,6 +352,31 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
         return pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : pageSize;
     }
 
+    private Integer normalizeMemoHandleFilter(Integer isHandle) {
+        if (isHandle == null) {
+            return null;
+        }
+        return normalizeRequiredMemoHandle(isHandle);
+    }
+
+    private Integer normalizeRequiredMemoHandle(Integer isHandle) {
+        if (isHandle == null || (isHandle != 0 && isHandle != 1)) {
+            throw new BusinessException(40001, "备忘录处理状态必须是 0 或 1");
+        }
+        return isHandle;
+    }
+
+    private String normalizeMemoContent(String content) {
+        String normalizedContent = trimToNull(content);
+        if (normalizedContent == null) {
+            throw new BusinessException(40001, "备忘录内容不能为空");
+        }
+        if (normalizedContent.length() > 500) {
+            throw new BusinessException(40001, "备忘录内容不能超过 500 个字符");
+        }
+        return normalizedContent;
+    }
+
     private LocalDate parseRequiredDate(String value, String errorMessage) {
         if (value == null || value.isBlank()) {
             throw new BusinessException(40001, errorMessage);
@@ -322,6 +385,10 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
     }
 
     private int count(List<WorkspaceDashboardRoomRowVO> rows, java.util.function.Predicate<WorkspaceDashboardRoomRowVO> predicate) {
+        return Math.toIntExact(rows.stream().filter(predicate).count());
+    }
+
+    private int countOrders(List<WorkspaceDashboardOrderRowVO> rows, java.util.function.Predicate<WorkspaceDashboardOrderRowVO> predicate) {
         return Math.toIntExact(rows.stream().filter(predicate).count());
     }
 
@@ -344,6 +411,15 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
     }
 
     private boolean isCheckedIn(WorkspaceDashboardRoomRowVO row) {
+        return "checked_in".equalsIgnoreCase(trimToNull(row.getOrderStatus()));
+    }
+
+    private boolean isBooked(WorkspaceDashboardOrderRowVO row) {
+        String status = trimToNull(row.getOrderStatus());
+        return "booked".equalsIgnoreCase(status) || "pending".equalsIgnoreCase(status);
+    }
+
+    private boolean isCheckedIn(WorkspaceDashboardOrderRowVO row) {
         return "checked_in".equalsIgnoreCase(trimToNull(row.getOrderStatus()));
     }
 
@@ -580,9 +656,42 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
     }
 
     private WorkspaceBacklogItemVO toBacklogItem(String title, String subTitle, String button) {
+        return toBacklogItem("todo", title, subTitle, button);
+    }
+
+    private WorkspaceBacklogItemVO toBacklogItem(String type, String title, String subTitle, String button) {
         WorkspaceBacklogItemVO item = new WorkspaceBacklogItemVO();
-        item.setContent("{\"title\":\"" + escapeJson(title) + "\",\"sub_title\":\"" + escapeJson(subTitle) + "\",\"button\":\"" + escapeJson(button) + "\"}");
+        item.setContent("{\"type\":\"" + escapeJson(type) + "\",\"title\":\"" + escapeJson(title) + "\",\"sub_title\":\"" + escapeJson(subTitle) + "\",\"button\":\"" + escapeJson(button) + "\"}");
         return item;
+    }
+
+    private WorkspaceBacklogItemVO toProductDynamicItem(WorkspaceProductDynamicRowVO row) {
+        String productName = defaultString(row.getProductName(), "未命名商品");
+        String goodsTypeName = resolveGoodsTypeName(row.getGoodsType());
+        String stockText = row.getStock() == null ? "库存 -" : "库存 " + row.getStock();
+        return toBacklogItem(
+                "product",
+                productName + " 已上架",
+                goodsTypeName + " · 售价 " + formatCentAmount(row.getSellingPriceCent()) + " · " + stockText,
+                "查看产品"
+        );
+    }
+
+    private String resolveGoodsTypeName(String goodsType) {
+        String normalized = trimToNull(goodsType);
+        if (normalized == null) {
+            return "商品";
+        }
+        return switch (normalized) {
+            case "coupon" -> "预售券";
+            case "package" -> "酒店套餐";
+            case "service" -> "增值服务";
+            default -> normalized;
+        };
+    }
+
+    private String formatCentAmount(Long amountCent) {
+        return "¥" + toAmount(defaultLong(amountCent)).stripTrailingZeros().toPlainString();
     }
 
     private String escapeJson(String value) {

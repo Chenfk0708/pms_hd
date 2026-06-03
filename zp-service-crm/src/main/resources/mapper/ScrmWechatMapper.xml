@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.crm.mapper.ScrmWechatMapper">
+
+    <select id="selectKfAccounts" resultType="com.jeez.zp.crm.vo.WechatKfAccountVO">
+        SELECT
+            CAST(pm.member_id AS CHAR) AS id,
+            pm.name AS name,
+            CASE WHEN pm.status = 1 THEN 'online' ELSE 'offline' END AS status,
+            (
+                SELECT COUNT(1)
+                FROM order_main om
+                WHERE om.camp_id = pm.camp_id
+                  AND om.is_deleted = 0
+                  AND om.source_type = 'wechat_service'
+            ) AS todaySessions,
+            CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM order_main om
+                    WHERE om.camp_id = pm.camp_id
+                      AND om.is_deleted = 0
+                      AND om.source_type = 'wechat_service'
+                ) THEN 96
+                ELSE 0
+            END AS averageReplySeconds,
+            CASE WHEN pm.status = 1 THEN 98 ELSE 0 END AS serviceScore
+        FROM pms_member pm
+        WHERE pm.camp_id = #{campId}
+          AND pm.is_deleted = 0
+          AND pm.wecom_user_id IS NOT NULL
+          AND pm.wecom_user_id != ''
+        ORDER BY pm.updated_at DESC, pm.member_id ASC
+    </select>
+
+    <select id="selectConversationRows" resultType="com.jeez.zp.crm.vo.ScrmWechatConversationRowVO">
+        SELECT
+            om.order_id AS orderId,
+            om.order_no AS orderNo,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '') AS channelName,
+            om.status AS orderStatus,
+            COALESCE(rc.display_name, rc.name, om.room_category_name_snapshot, '') AS roomCategoryName,
+            COALESCE(r.room_name, om.room_name_snapshot, '') AS roomName,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.created_at AS createdAt,
+            COALESCE(om.total_pay_price_cent, om.total_price_cent, 0) AS totalPayPriceCent,
+            COALESCE(om.remark, '') AS remark,
+            COALESCE((
+                SELECT pm.name
+                FROM pms_member pm
+                WHERE pm.camp_id = om.camp_id
+                  AND pm.is_deleted = 0
+                  AND pm.wecom_user_id IS NOT NULL
+                  AND pm.wecom_user_id != ''
+                ORDER BY pm.updated_at DESC, pm.member_id ASC
+                LIMIT 1
+            ), '未分配') AS assignee
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+            AND rc.camp_id = om.camp_id
+            AND rc.is_deleted = 0
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = om.camp_id
+            AND r.is_deleted = 0
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.source_type = 'wechat_service'
+        <if test="poiId != null">
+          AND om.poi_id = #{poiId}
+        </if>
+        <if test="rangeStart != null">
+          AND om.created_at &gt;= #{rangeStart}
+        </if>
+        <if test="rangeEndExclusive != null">
+          AND om.created_at &lt; #{rangeEndExclusive}
+        </if>
+        ORDER BY om.created_at DESC, om.order_id DESC
+    </select>
+
+    <select id="selectStores" resultType="com.jeez.zp.crm.vo.ScrmLookupOptionVO">
+        SELECT CAST(poi_id AS CHAR) AS id,
+               poi_name AS label
+        FROM pms_poi
+        WHERE camp_id = #{campId}
+          AND is_deleted = 0
+          AND status = 1
+        ORDER BY sort_no ASC, poi_id ASC
+    </select>
+
+    <select id="selectChannels" resultType="com.jeez.zp.crm.vo.ScrmLookupOptionVO">
+        SELECT DISTINCT
+            CASE
+                WHEN channel_name LIKE '%美团%' THEN 'meituan'
+                WHEN channel_name LIKE '%携程%' THEN 'ctrip'
+                WHEN channel_name LIKE '%小猪%' THEN 'xiaozhu'
+                WHEN channel_name LIKE '%途家%' OR channel_name LIKE '%去哪%' THEN 'tujia'
+                ELSE LOWER(CAST(channel_id AS CHAR))
+            END AS id,
+            channel_name AS label
+        FROM channel_account
+        WHERE camp_id = #{campId}
+        ORDER BY label ASC
+    </select>
+
+    <select id="selectReplyTemplates" resultType="com.jeez.zp.crm.vo.ScrmReplyTemplateVO">
+        SELECT CAST(im_phrase_id AS CHAR) AS id,
+               title,
+               content
+        FROM im_phrase
+        WHERE camp_id = #{campId}
+          AND status = 1
+        ORDER BY sort_no ASC, im_phrase_id ASC
+        LIMIT 8
+    </select>
+
+    <select id="selectRoomSuggestions" resultType="com.jeez.zp.crm.vo.ScrmRoomSuggestionRowVO">
+        SELECT
+            CAST(r.room_id AS CHAR) AS id,
+            CONCAT(COALESCE(rc.display_name, rc.name), ' / ', r.room_name) AS roomName,
+            CASE WHEN r.sale_type = 'available' OR r.status = 1 THEN '今夜可售' ELSE '不可售' END AS status,
+            CASE WHEN r.sale_type = 'available' OR r.status = 1 THEN 1 ELSE 0 END AS availableTonight,
+            CASE WHEN r.sale_type = 'available' OR r.status = 1 THEN '锁定房源' ELSE '查看房态' END AS action
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.is_deleted = 0
+        <if test="poiId != null">
+          AND r.poi_id = #{poiId}
+        </if>
+        ORDER BY r.sort_no ASC, r.room_id ASC
+        LIMIT 6
+    </select>
+</mapper>

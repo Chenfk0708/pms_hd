@@ -100,6 +100,56 @@
         ORDER BY om.start_at ASC, om.order_id ASC
     </select>
 
+    <select id="selectLifecycleOrderRows" resultType="com.jeez.zp.platform.vo.WorkspaceDashboardOrderRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            om.status AS orderStatus,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.day_num AS dayNum,
+            om.total_price_cent AS totalPriceCent,
+            COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) AS commissionPriceCent,
+            CASE
+                WHEN om.settlement_amount_cent > 0 THEN om.settlement_amount_cent
+                WHEN om.total_pay_price_cent > 0 THEN GREATEST(
+                    om.total_pay_price_cent - COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                    0
+                )
+                ELSE GREATEST(
+                    om.total_price_cent - COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0),
+                    0
+                )
+            END AS businessIncomeCent,
+            COALESCE(
+                NULLIF(ca.channel_name, ''),
+                CASE
+                    WHEN om.source_type = 'frontdesk' THEN '自来客'
+                    WHEN om.source_type = 'phone' THEN '电话订单'
+                    ELSE '未知渠道'
+                END
+            ) AS channelName,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            rc.name AS roomCategoryName,
+            r.room_name AS roomName,
+            om.source_type AS sourceType
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN distribution_order do ON do.source_order_id = om.order_id
+            AND do.camp_id = om.camp_id
+            AND (do.channel_id = om.channel_id OR do.channel_id IS NULL)
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+        LEFT JOIN room r ON r.room_id = om.room_id
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.order_type = 'daily_room'
+          AND om.status IN ('booked', 'checked_in', 'pending')
+          AND om.start_at &lt; #{rangeEndExclusive}
+          AND om.end_at &gt; #{rangeStart}
+        ORDER BY om.start_at ASC, om.order_id ASC
+    </select>
+
     <select id="selectWorkspaceOrders" resultType="com.jeez.zp.platform.vo.WorkspaceOrderListRowVO">
         SELECT
             CAST(om.order_id AS CHAR) AS orderId,
@@ -166,5 +216,99 @@
         WHERE om.camp_id = #{campId}
           AND om.is_deleted = 0
           AND om.status IN ('refunding', 'cancelled', 'refunded')
+    </select>
+
+    <select id="selectProductDynamics" resultType="com.jeez.zp.platform.vo.WorkspaceProductDynamicRowVO">
+        SELECT
+            CAST(gm.goods_id AS CHAR) AS productId,
+            gm.name AS productName,
+            gm.goods_type AS goodsType,
+            gm.selling_price_cent AS sellingPriceCent,
+            gm.stock AS stock,
+            gm.shelf_status AS shelfStatus,
+            gm.status AS status,
+            gm.created_at AS createdAt,
+            gm.updated_at AS updatedAt
+        FROM goods_main gm
+        WHERE gm.camp_id = #{campId}
+          AND gm.is_deleted = 0
+          AND gm.status = 'published'
+          AND gm.shelf_status = 'on_shelf'
+        ORDER BY COALESCE(gm.updated_at, gm.created_at) DESC, gm.goods_id DESC
+        LIMIT 5
+    </select>
+
+    <select id="countWorkspaceMemos" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM workspace_memo wm
+        WHERE wm.camp_id = #{campId}
+          AND wm.is_deleted = 0
+        <if test="isHandle != null">
+          AND wm.is_handle = #{isHandle}
+        </if>
+    </select>
+
+    <select id="selectWorkspaceMemos" resultType="com.jeez.zp.platform.vo.WorkspaceMemoItemVO">
+        SELECT
+            CAST(wm.memo_id AS CHAR) AS memoId,
+            wm.content AS content,
+            wm.is_handle AS isHandle
+        FROM workspace_memo wm
+        WHERE wm.camp_id = #{campId}
+          AND wm.is_deleted = 0
+        <if test="isHandle != null">
+          AND wm.is_handle = #{isHandle}
+        </if>
+        ORDER BY wm.created_at DESC, wm.memo_id DESC
+        LIMIT #{pageSize} OFFSET #{offset}
+    </select>
+
+    <insert id="insertWorkspaceMemo">
+        INSERT INTO workspace_memo (
+            memo_id,
+            camp_id,
+            user_id,
+            content,
+            is_handle,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+            is_deleted
+        ) VALUES (
+            #{memoId},
+            #{campId},
+            #{userId},
+            #{content},
+            0,
+            NOW(),
+            NOW(),
+            #{userId},
+            #{userId},
+            0
+        )
+    </insert>
+
+    <update id="updateWorkspaceMemoHandle">
+        UPDATE workspace_memo
+        SET is_handle = #{isHandle},
+            handled_at = CASE WHEN #{isHandle} = 1 THEN NOW() ELSE NULL END,
+            updated_at = NOW(),
+            updated_by = #{userId}
+        WHERE camp_id = #{campId}
+          AND memo_id = #{memoId}
+          AND is_deleted = 0
+    </update>
+
+    <select id="selectWorkspaceMemoById" resultType="com.jeez.zp.platform.vo.WorkspaceMemoItemVO">
+        SELECT
+            CAST(wm.memo_id AS CHAR) AS memoId,
+            wm.content AS content,
+            wm.is_handle AS isHandle
+        FROM workspace_memo wm
+        WHERE wm.camp_id = #{campId}
+          AND wm.memo_id = #{memoId}
+          AND wm.is_deleted = 0
+        LIMIT 1
     </select>
 </mapper>

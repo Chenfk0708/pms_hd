@@ -174,4 +174,68 @@
             rc.sort_no ASC,
             rc.room_category_id ASC
     </select>
+
+    <select id="selectLogRows" resultType="com.jeez.zp.platform.vo.OtaLogQueryRowVO">
+        SELECT
+            log_rows.accountId,
+            log_rows.channelId,
+            log_rows.channelName,
+            log_rows.accountName,
+            log_rows.accountStatus,
+            log_rows.accountAuthorizedAt,
+            log_rows.accountUpdatedAt,
+            log_rows.roomRelId,
+            log_rows.outRoomCategoryId,
+            log_rows.roomCategoryName,
+            log_rows.shelfStatus,
+            log_rows.auditStatus,
+            log_rows.roomRelUpdatedAt
+        FROM (
+            SELECT
+                CAST(ca.account_id AS CHAR) AS accountId,
+                ca.channel_id AS channelId,
+                ca.channel_name AS channelName,
+                ca.account_name AS accountName,
+                ca.status AS accountStatus,
+                ca.authorized_at AS accountAuthorizedAt,
+                ca.updated_at AS accountUpdatedAt,
+                NULL AS roomRelId,
+                NULL AS outRoomCategoryId,
+                NULL AS roomCategoryName,
+                NULL AS shelfStatus,
+                NULL AS auditStatus,
+                NULL AS roomRelUpdatedAt,
+                COALESCE(ca.authorized_at, ca.updated_at) AS sortTime
+            FROM channel_account ca
+            WHERE ca.camp_id = #{campId}
+              AND ca.status = 'authorized'
+
+            UNION ALL
+
+            SELECT
+                CAST(ca.account_id AS CHAR) AS accountId,
+                ca.channel_id AS channelId,
+                ca.channel_name AS channelName,
+                ca.account_name AS accountName,
+                ca.status AS accountStatus,
+                ca.authorized_at AS accountAuthorizedAt,
+                ca.updated_at AS accountUpdatedAt,
+                CAST(rel.id AS CHAR) AS roomRelId,
+                rel.out_room_category_id AS outRoomCategoryId,
+                rc.name AS roomCategoryName,
+                rel.shelf_status AS shelfStatus,
+                rel.audit_status AS auditStatus,
+                rel.updated_at AS roomRelUpdatedAt,
+                rel.updated_at AS sortTime
+            FROM channel_room_category_rel rel
+            JOIN channel_account ca ON ca.account_id = rel.account_id
+                AND ca.camp_id = rel.camp_id
+            LEFT JOIN room_category rc ON rc.room_category_id = rel.room_category_id
+                AND rc.camp_id = rel.camp_id
+            WHERE rel.camp_id = #{campId}
+              AND rel.shelf_status = 'on_shelf'
+              AND rel.audit_status = 'approved'
+        ) log_rows
+        ORDER BY log_rows.sortTime DESC, log_rows.accountId ASC
+    </select>
 </mapper>

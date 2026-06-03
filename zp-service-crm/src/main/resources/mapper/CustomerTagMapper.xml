@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.crm.mapper.CustomerTagMapper">
+
+    <select id="selectTagGroups" resultType="com.jeez.zp.crm.vo.CustomerTagGroupQueryRowVO">
+        SELECT
+            CAST(g.tag_group_id AS CHAR) AS tagGroupId,
+            g.name AS tagGroupName,
+            GROUP_CONCAT(t.tag_name ORDER BY t.sort_no ASC, t.tag_id ASC SEPARATOR ',') AS tagNamesCsv,
+            COUNT(DISTINCT c.customer_id) AS memberCount,
+            COUNT(DISTINCT CASE
+                WHEN rel.created_at &gt;= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN c.customer_id
+                ELSE NULL
+            END) AS recentlyAddedCount,
+            'system' AS createdBy,
+            DATE_FORMAT(g.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+            DATE_FORMAT(g.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt,
+            COALESCE(g.source_type, 'manual') AS source,
+            CASE
+                WHEN COALESCE(g.source_type, 'manual') = 'wechat' THEN 'syncing'
+                ELSE 'enabled'
+            END AS status,
+            CONCAT('tags:', COUNT(DISTINCT t.tag_id), ', members:', COUNT(DISTINCT rel.customer_id)) AS description
+        FROM crm_customer_tag_group g
+        LEFT JOIN crm_customer_tag t ON t.tag_group_id = g.tag_group_id
+            AND t.status = 1
+        LEFT JOIN crm_customer_tag_rel rel ON rel.tag_id = t.tag_id
+        LEFT JOIN crm_customer c ON c.customer_id = rel.customer_id
+            AND c.camp_id = g.camp_id
+            AND c.is_deleted = 0
+        WHERE g.camp_id = #{campId}
+          AND g.status = 1
+        <if test="keyword != null and keyword != ''">
+            AND (
+                g.name LIKE CONCAT('%', #{keyword}, '%')
+                OR EXISTS (
+                    SELECT 1
+                    FROM crm_customer_tag kt
+                    WHERE kt.tag_group_id = g.tag_group_id
+                      AND kt.status = 1
+                      AND kt.tag_name LIKE CONCAT('%', #{keyword}, '%')
+                )
+            )
+        </if>
+        GROUP BY g.tag_group_id, g.name, g.source_type, g.sort_no, g.created_at, g.updated_at
+        ORDER BY g.sort_no ASC, g.tag_group_id DESC
+    </select>
+
+    <insert id="upsertTagGroup">
+        INSERT INTO crm_customer_tag_group (
+            tag_group_id,
+            camp_id,
+            name,
+            source_type,
+            sort_no,
+            status
+        ) VALUES (
+            #{tagGroupId},
+            #{campId},
+            #{tagGroupName},
+            #{sourceType},
+            0,
+            1
+        )
+        ON DUPLICATE KEY UPDATE
+            name = VALUES(name),
+            source_type = VALUES(source_type),
+            status = 1,
+            updated_at = NOW()
+    </insert>
+
+    <insert id="upsertTag">
+        INSERT INTO crm_customer_tag (
+            tag_id,
+            tag_group_id,
+            tag_name,
+            sort_no,
+            status
+        ) VALUES (
+            #{tagId},
+            #{tagGroupId},
+            #{tagName},
+            #{sortNo},
+            1
+        )
+        ON DUPLICATE KEY UPDATE
+            sort_no = VALUES(sort_no),
+            status = 1
+    </insert>
+
+    <select id="selectWeComAccounts" resultType="com.jeez.zp.crm.vo.WeComAccountVO">
+        SELECT
+            CAST(member_id AS CHAR) AS accountId,
+            name AS accountName,
+            wecom_user_id AS wecomUserId,
+            mobile AS mobile,
+            CASE WHEN status = 1 THEN 'authorized' ELSE 'disabled' END AS status,
+            DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM pms_member
+        WHERE camp_id = #{campId}
+          AND is_deleted = 0
+          AND wecom_user_id IS NOT NULL
+          AND wecom_user_id != ''
+        ORDER BY updated_at DESC, member_id ASC
+    </select>
+</mapper>

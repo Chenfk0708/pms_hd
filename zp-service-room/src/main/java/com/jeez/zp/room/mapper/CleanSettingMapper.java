@@ -32,4 +32,12 @@ public interface CleanSettingMapper {
             @Param("startHour") int startHour,
             @Param("endHour") int endHour
     );
+
+    int upsertSetting(
+            @Param("settingId") Long settingId,
+            @Param("campId") Long campId,
+            @Param("configKey") String configKey,
+            @Param("configValue") String configValue,
+            @Param("updatedBy") Long updatedBy
+    );
 }

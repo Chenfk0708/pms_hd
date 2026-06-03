@@ -17,7 +17,10 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 import static org.hamcrest.Matchers.closeTo;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -130,6 +133,66 @@ class ProfitReportQueryIT {
                 .andExpect(jsonPath("$.data.list[3].cleanCost").value(closeTo(61.00, 0.001)))
                 .andExpect(jsonPath("$.data.list[3].profitPrice").value(closeTo(29.00, 0.001)))
                 .andExpect(jsonPath("$.data.list[3].profitRate").value("32.22%"));
+    }
+
+    @Test
+    @Timeout(60)
+    void statisticsProfitReportExport_shouldReturnCsvExportTaskFromRealProfitRows() throws Exception {
+        seedProfitScene();
+
+        mockMvc.perform(post("/statistics/profit-report/export")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"19801",
+                                  "startDate":"2026-05-10",
+                                  "endDate":"2026-05-12",
+                                  "pageNum":1,
+                                  "pageSize":9999,
+                                  "current":1,
+                                  "breakTemp":false,
+                                  "isCleanCost":1,
+                                  "exportExcelMenuId":"profit-report"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.data.taskId").value("PROFIT-REPORT-EXPORT-19801-20260510-20260512"))
+                .andExpect(jsonPath("$.data.fileName").value("profit_report_20260510_20260512.csv"))
+                .andExpect(jsonPath("$.data.contentType").value("text/csv"))
+                .andExpect(jsonPath("$.data.downloadUrl").value("/api/statistics/profit-report/export/download?campId=19801&startDate=2026-05-10&endDate=2026-05-12&isCleanCost=1"))
+                .andExpect(jsonPath("$.data.total").value(4))
+                .andExpect(jsonPath("$.data.rows.length()").value(4))
+                .andExpect(jsonPath("$.data.rows[0].date").value("\u5408\u8ba1"))
+                .andExpect(jsonPath("$.data.rows[0].isTotal").value(1))
+                .andExpect(jsonPath("$.data.rows[0].cleanCost").value(closeTo(127.00, 0.001)))
+                .andExpect(jsonPath("$.data.rows[0].profitPrice").value(closeTo(413.00, 0.001)))
+                .andExpect(jsonPath("$.data.rows[0].profitRate").value("76.48%"));
+    }
+
+
+    @Test
+    @Timeout(60)
+    void statisticsProfitReportExportDownload_shouldReturnCsvFromRealProfitRows() throws Exception {
+        seedProfitScene();
+
+        mockMvc.perform(get("/statistics/profit-report/export/download")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .param("campId", "19801")
+                        .param("startDate", "2026-05-10")
+                        .param("endDate", "2026-05-12")
+                        .param("isCleanCost", "1"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "text/csv;charset=UTF-8"))
+                .andExpect(header().string("Content-Disposition", "attachment; filename=profit_report_20260510_20260512.csv"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("date,roomFeeMinusCommission,totalIncome,cleanCost,profitPrice,profitRate")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\u5408\u8ba1,540.00,540.00,127.00,413.00,76.48%")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("2026-05-12,90.00,90.00,61.00,29.00,32.22%")));
     }
 
     @Test

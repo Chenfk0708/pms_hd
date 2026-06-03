@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.room.mapper.RoomStatusesMonthlyMapper">
+
+    <sql id="statusDailyFilters">
+        WHERE rsd.camp_id = #{campId}
+          AND rsd.biz_date &gt;= #{startDate}
+          AND rsd.biz_date &lt; #{endDate}
+        <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">
+            AND rsd.room_category_id IN
+            <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                #{roomCategoryId}
+            </foreach>
+        </if>
+        <if test="poiIds != null and poiIds.size() > 0">
+            AND rsd.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND EXISTS (
+                SELECT 1
+                FROM room_category rc
+                WHERE rc.room_category_id = rsd.room_category_id
+                  AND rc.camp_id = rsd.camp_id
+                  AND rc.name LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+    </sql>
+
+    <sql id="orderFilters">
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.start_at &lt; #{endDate}
+          AND om.end_at &gt; #{startDate}
+          AND om.status NOT IN ('cancelled', 'canceled')
+          AND om.room_category_id IS NOT NULL
+          AND om.room_id IS NOT NULL
+        <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">
+            AND om.room_category_id IN
+            <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                #{roomCategoryId}
+            </foreach>
+        </if>
+        <if test="poiIds != null and poiIds.size() > 0">
+            AND om.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                om.guest_name LIKE CONCAT('%', #{keyword}, '%')
+                OR EXISTS (
+                    SELECT 1
+                    FROM room r
+                    WHERE r.room_id = om.room_id
+                      AND r.camp_id = om.camp_id
+                      AND r.room_name LIKE CONCAT('%', #{keyword}, '%')
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM room_category rc
+                    WHERE rc.room_category_id = om.room_category_id
+                      AND rc.camp_id = om.camp_id
+                      AND rc.name LIKE CONCAT('%', #{keyword}, '%')
+                )
+            )
+        </if>
+    </sql>
+
+    <select id="selectInventoryRows" resultType="com.jeez.zp.room.vo.RoomStatusesMonthlyInventoryVO">
+        SELECT
+            CAST(rsd.room_category_id AS CHAR) AS roomCategoryId,
+            DATE_FORMAT(rsd.biz_date, '%Y-%m-%d') AS date,
+            SUM(rsd.availability_count) AS inventory,
+            SUM(rsd.availability_count) AS inv,
+            SUM(rsd.availability_count) AS remain,
+            SUM(rsd.availability_count) AS remainNum,
+            SUM(rsd.availability_count) AS availableNum,
+            SUM(rsd.availability_count) AS num
+        FROM room_status_daily rsd
+        <include refid="statusDailyFilters"/>
+        GROUP BY rsd.room_category_id, rsd.biz_date
+        ORDER BY rsd.room_category_id ASC, rsd.biz_date ASC
+    </select>
+
+    <select id="selectDailyMonitorRows" resultType="com.jeez.zp.room.vo.RoomStatusesMonthlyDailyMonitorVO">
+        SELECT
+            DATE_FORMAT(rsd.biz_date, '%Y-%m-%d') AS date,
+            CONCAT('余', SUM(rsd.availability_count), '间') AS remain,
+            SUM(rsd.availability_count) AS remainNum,
+            SUM(rsd.availability_count) AS availableNum,
+            SUM(rsd.availability_count) AS num
+        FROM room_status_daily rsd
+        <include refid="statusDailyFilters"/>
+        GROUP BY rsd.biz_date
+        ORDER BY rsd.biz_date ASC
+    </select>
+
+    <select id="selectOccRows" resultType="com.jeez.zp.room.vo.RoomStatusesMonthlyOccVO">
+        SELECT
+            DATE_FORMAT(rsd.biz_date, '%Y-%m-%d') AS date,
+            SUM(rsd.availability_count) AS availabilityCount,
+            SUM(rsd.open_room_count) AS openRoomCount,
+            SUM(rsd.room_sale_count) AS roomSaleCount,
+            SUM(rsd.vacant_count) AS vacantCount,
+            CASE
+                WHEN SUM(rsd.availability_count) = 0 THEN 0
+                ELSE ROUND(SUM(rsd.open_room_count) / SUM(rsd.availability_count), 4)
+            END AS occ,
+            CASE
+                WHEN SUM(rsd.availability_count) = 0 THEN 0
+                ELSE ROUND(SUM(rsd.open_room_count) / SUM(rsd.availability_count), 4)
+            END AS occupancyRate
+        FROM room_status_daily rsd
+        <include refid="statusDailyFilters"/>
+        GROUP BY rsd.biz_date
+        ORDER BY rsd.biz_date ASC
+    </select>
+
+    <select id="countOrderDetails" resultType="long">
+        SELECT COUNT(1)
+        FROM order_main om
+        <include refid="orderFilters"/>
+    </select>
+
+    <select id="selectOrderDetails" resultType="com.jeez.zp.room.vo.RoomStatusesMonthlyOrderDetailVO">
+        SELECT
+            CAST(om.room_category_id AS CHAR) AS roomCategoryId,
+            CAST(om.room_id AS CHAR) AS roomId,
+            DATE_FORMAT(om.start_at, '%Y-%m-%d') AS date,
+            om.guest_name AS guestName,
+            ca.channel_name AS channelName,
+            ROUND(om.total_price_cent / 100, 2) AS roomFee,
+            ROUND(om.total_pay_price_cent / 100, 2) AS totalIncome,
+            CONCAT(DATE_FORMAT(om.start_at, '%Y-%m-%d'), '-', DATE_FORMAT(om.end_at, '%m-%d')) AS stayRange,
+            om.guest_mobile AS phone,
+            om.remark AS remark,
+            CAST(om.order_id AS CHAR) AS orderId,
+            CAST(om.order_id AS CHAR) AS id,
+            CASE WHEN om.remark IS NULL OR om.remark = '' THEN FALSE ELSE TRUE END AS hasRemark,
+            CASE
+                WHEN om.status = 'checked_in' THEN '入住中'
+                WHEN om.status IN ('booked', 'pending') THEN '待入住'
+                WHEN om.status IN ('checked_out', 'completed') THEN '已退房'
+                ELSE om.status
+            END AS liveStatusName,
+            CASE
+                WHEN om.status = 'checked_in' THEN '入住中'
+                WHEN om.status IN ('booked', 'pending') THEN '待入住'
+                WHEN om.status IN ('checked_out', 'completed') THEN '已退房'
+                ELSE om.status
+            END AS statusName,
+            DATE_FORMAT(om.start_at, '%Y-%m-%d') AS checkInDate,
+            DATE_FORMAT(om.end_at, '%Y-%m-%d') AS checkOutDate
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        <include refid="orderFilters"/>
+        ORDER BY om.start_at ASC, om.order_id ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+</mapper>

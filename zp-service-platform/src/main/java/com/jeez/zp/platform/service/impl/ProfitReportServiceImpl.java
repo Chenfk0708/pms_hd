@@ -6,6 +6,7 @@ import com.jeez.zp.platform.mapper.ProfitReportMapper;
 import com.jeez.zp.platform.service.ProfitReportService;
 import com.jeez.zp.platform.vo.CurrentUserBundleVO;
 import com.jeez.zp.platform.vo.ProfitReportCleanTaskRowVO;
+import com.jeez.zp.platform.vo.ProfitReportExportResponseVO;
 import com.jeez.zp.platform.vo.ProfitReportOrderRowVO;
 import com.jeez.zp.platform.vo.ProfitReportPageResponseVO;
 import com.jeez.zp.platform.vo.ProfitReportRowVO;
@@ -103,6 +104,90 @@ public class ProfitReportServiceImpl implements ProfitReportService {
         response.setPages(resolvePages(pageSlice.total(), resolvedPageSize));
         response.setList(pageSlice.items());
         return response;
+    }
+
+    @Override
+    public ProfitReportExportResponseVO exportProfitReport(
+            Long campId,
+            Long userId,
+            String startDate,
+            String endDate,
+            Long poiId,
+            Long roomCategoryId,
+            Long roomCategoryGroupId,
+            Long channelId,
+            Long roomId,
+            Integer isCleanCost
+    ) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        LocalDate rangeStart = parseRequiredDate(startDate, "startDate");
+        LocalDate rangeEnd = parseRequiredDate(endDate, "endDate");
+        ProfitReportPageResponseVO page = getProfitReport(
+                resolvedCampId,
+                userId,
+                rangeStart.toString(),
+                rangeEnd.toString(),
+                poiId,
+                roomCategoryId,
+                roomCategoryGroupId,
+                channelId,
+                roomId,
+                isCleanCost,
+                1,
+                1,
+                Integer.MAX_VALUE
+        );
+        String startToken = rangeStart.toString().replace("-", "");
+        String endToken = rangeEnd.toString().replace("-", "");
+
+        ProfitReportExportResponseVO response = new ProfitReportExportResponseVO();
+        response.setTaskId("PROFIT-REPORT-EXPORT-" + resolvedCampId + "-" + startToken + "-" + endToken);
+        response.setFileName("profit_report_" + startToken + "_" + endToken + ".csv");
+        response.setContentType("text/csv");
+        response.setDownloadUrl(buildDownloadUrl(
+                resolvedCampId,
+                rangeStart,
+                rangeEnd,
+                poiId,
+                roomCategoryId,
+                roomCategoryGroupId,
+                channelId,
+                roomId,
+                isCleanCost
+        ));
+        response.setTotal(Math.toIntExact(page.getTotal()));
+        response.setRows(page.getList());
+        return response;
+    }
+
+    private String buildDownloadUrl(
+            Long campId,
+            LocalDate rangeStart,
+            LocalDate rangeEnd,
+            Long poiId,
+            Long roomCategoryId,
+            Long roomCategoryGroupId,
+            Long channelId,
+            Long roomId,
+            Integer isCleanCost
+    ) {
+        StringBuilder url = new StringBuilder("/api/statistics/profit-report/export/download")
+                .append("?campId=").append(campId)
+                .append("&startDate=").append(rangeStart)
+                .append("&endDate=").append(rangeEnd)
+                .append("&isCleanCost=").append(shouldIncludeCleanCost(isCleanCost) ? 1 : 0);
+        appendQueryParam(url, "poiId", poiId);
+        appendQueryParam(url, "roomCategoryId", roomCategoryId);
+        appendQueryParam(url, "roomCategoryGroupId", roomCategoryGroupId);
+        appendQueryParam(url, "channelId", channelId);
+        appendQueryParam(url, "roomId", roomId);
+        return url.toString();
+    }
+
+    private void appendQueryParam(StringBuilder url, String name, Long value) {
+        if (value != null) {
+            url.append("&").append(name).append("=").append(value);
+        }
     }
 
     private Map<LocalDate, MutableProfitRow> aggregate(

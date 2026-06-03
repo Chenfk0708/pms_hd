@@ -21,6 +21,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -35,6 +36,10 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
     private static final int VIEW_BY_ROOM_CATEGORY = 1;
     private static final int VIEW_BY_ROOM = 2;
     private static final int VIEW_BY_FLOOR = 3;
+    private static final Comparator<RoomStatusesTodayRowVO> ORDER_PRIORITY = Comparator
+            .comparingInt((RoomStatusesTodayRowVO row) -> statusPriority(row.getOrderStatus()))
+            .thenComparing(RoomStatusesTodayRowVO::getCheckInAt, Comparator.nullsLast(LocalDateTime::compareTo))
+            .thenComparing(RoomStatusesTodayRowVO::getOrderId, Comparator.nullsLast(String::compareTo));
 
     private final RoomStatusesTodayMapper roomStatusesTodayMapper;
     private final UserCampMapper userCampMapper;
@@ -76,36 +81,37 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
                 tag
         );
 
-        List<RoomStatusesTodayRowVO> filteredRows = roomStatusesTodayMapper.selectRows(
+        List<RoomStatusesTodayRowVO> rawRows = roomStatusesTodayMapper.selectRows(
                         resolvedCampId,
                         query.dayStart(),
                         query.nextDayStart(),
                         query.roomCategoryGroupIds(),
                         query.roomCategoryIds(),
                         query.poiIds()
-                ).stream()
-                .filter(row -> matches(row, query))
+                );
+        List<RoomAggregate> roomAggregates = aggregateRooms(rawRows, query.targetDate()).stream()
+                .filter(roomAggregate -> matches(roomAggregate, query))
                 .toList();
 
         RoomStatusesTodayResponseVO response = new RoomStatusesTodayResponseVO();
-        response.setBasic(buildBasic(filteredRows, query.targetDate()));
+        response.setBasic(buildBasic(roomAggregates));
         response.setRoomCategories(List.of());
         response.setRoomViews(List.of());
         response.setFloorViews(List.of());
         response.setIsInitFloor(null);
 
         if (query.viewCode() == VIEW_BY_ROOM_CATEGORY) {
-            response.setRoomCategories(buildRoomCategories(filteredRows, query.targetDate()));
+            response.setRoomCategories(buildRoomCategories(roomAggregates));
             return response;
         }
 
         if (query.viewCode() == VIEW_BY_ROOM) {
-            response.setRoomViews(buildRoomViews(filteredRows, query.targetDate()));
+            response.setRoomViews(buildRoomViews(roomAggregates));
             return response;
         }
 
-        response.setFloorViews(buildFloorViews(filteredRows, query.targetDate()));
-        response.setIsInitFloor(hasFloor(filteredRows) ? 1 : 0);
+        response.setFloorViews(buildFloorViews(roomAggregates));
+        response.setIsInitFloor(hasFloor(roomAggregates) ? 1 : 0);
         return response;
     }
 
@@ -173,8 +179,12 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
         );
     }
 
-    private boolean matches(RoomStatusesTodayRowVO row, NormalizedQuery query) {
-        DerivedRoomState state = deriveState(row, query.targetDate());
+    private boolean matches(RoomAggregate roomAggregate, NormalizedQuery query) {
+        return roomAggregate.rows().stream()
+                .anyMatch(row -> matchesRow(row, roomAggregate.state(), query));
+    }
+
+    private boolean matchesRow(RoomStatusesTodayRowVO row, DerivedRoomState state, NormalizedQuery query) {
 
         if (query.cleanState() != null) {
             boolean isDirty = state.isDirty() == 1;
@@ -231,7 +241,7 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
         return query.statusFilters().stream().anyMatch(labels::contains);
     }
 
-    private RoomStatusesTodayBasicVO buildBasic(List<RoomStatusesTodayRowVO> rows, LocalDate targetDate) {
+    private RoomStatusesTodayBasicVO buildBasic(List<RoomAggregate> roomAggregates) {
         RoomStatusesTodayBasicVO basic = new RoomStatusesTodayBasicVO();
         int preComeNum = 0;
         int liveNum = 0;
@@ -251,8 +261,8 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
         int liveDirtyNum = 0;
         int extendStayNum = 0;
 
-        for (RoomStatusesTodayRowVO row : rows) {
-            DerivedRoomState state = deriveState(row, targetDate);
+        for (RoomAggregate roomAggregate : roomAggregates) {
+            DerivedRoomState state = roomAggregate.state();
             roomNum++;
             preComeNum += state.isPreCome();
             liveNum += state.isLive();
@@ -293,14 +303,15 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
         return basic;
     }
 
-    private List<RoomStatusesTodayCategoryVO> buildRoomCategories(List<RoomStatusesTodayRowVO> rows, LocalDate targetDate) {
+    private List<RoomStatusesTodayCategoryVO> buildRoomCategories(List<RoomAggregate> roomAggregates) {
         Map<String, RoomStatusesTodayCategoryVO> categories = new LinkedHashMap<>();
-        for (RoomStatusesTodayRowVO row : rows) {
-            RoomStatusesTodayCategoryVO category = categories.computeIfAbsent(row.getRoomCategoryId(), ignored -> {
+        for (RoomAggregate roomAggregate : roomAggregates) {
+            RoomStatusesTodayRowVO primaryRow = roomAggregate.primaryRow();
+            RoomStatusesTodayCategoryVO category = categories.computeIfAbsent(primaryRow.getRoomCategoryId(), ignored -> {
                 RoomStatusesTodayCategoryVO item = new RoomStatusesTodayCategoryVO();
-                item.setRoomCategoryId(row.getRoomCategoryId());
-                item.setRoomCategoryName(row.getRoomCategoryName());
-                item.setRoomCategorySeq(row.getRoomCategorySeq());
+                item.setRoomCategoryId(primaryRow.getRoomCategoryId());
+                item.setRoomCategoryName(primaryRow.getRoomCategoryName());
+                item.setRoomCategorySeq(primaryRow.getRoomCategorySeq());
                 item.setRooms(new ArrayList<>());
                 item.setRoomNum(0);
                 item.setSoldNum(0);
@@ -309,8 +320,8 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
                 item.setOccNum(0);
                 return item;
             });
-            DerivedRoomState state = deriveState(row, targetDate);
-            category.getRooms().add(toRoomView(row, state));
+            DerivedRoomState state = roomAggregate.state();
+            category.getRooms().add(toRoomView(roomAggregate));
             category.setRoomNum(category.getRoomNum() + 1);
             category.setSoldNum(category.getSoldNum() + state.soldCount());
             category.setLiveNum(category.getLiveNum() + state.isLive());
@@ -320,31 +331,34 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
         return new ArrayList<>(categories.values());
     }
 
-    private List<RoomStatusesTodayRoomVO> buildRoomViews(List<RoomStatusesTodayRowVO> rows, LocalDate targetDate) {
-        return rows.stream()
-                .map(row -> toRoomView(row, deriveState(row, targetDate)))
+    private List<RoomStatusesTodayRoomVO> buildRoomViews(List<RoomAggregate> roomAggregates) {
+        return roomAggregates.stream()
+                .map(this::toRoomView)
                 .toList();
     }
 
-    private List<RoomStatusesTodayFloorVO> buildFloorViews(List<RoomStatusesTodayRowVO> rows, LocalDate targetDate) {
+    private List<RoomStatusesTodayFloorVO> buildFloorViews(List<RoomAggregate> roomAggregates) {
         Map<String, RoomStatusesTodayFloorVO> floors = new LinkedHashMap<>();
-        for (RoomStatusesTodayRowVO row : rows) {
-            if (row.getFloorId() == null || row.getFloorId().isBlank()) {
+        for (RoomAggregate roomAggregate : roomAggregates) {
+            RoomStatusesTodayRowVO primaryRow = roomAggregate.primaryRow();
+            if (primaryRow.getFloorId() == null || primaryRow.getFloorId().isBlank()) {
                 continue;
             }
-            RoomStatusesTodayFloorVO floor = floors.computeIfAbsent(row.getFloorId(), ignored -> {
+            RoomStatusesTodayFloorVO floor = floors.computeIfAbsent(primaryRow.getFloorId(), ignored -> {
                 RoomStatusesTodayFloorVO item = new RoomStatusesTodayFloorVO();
-                item.setFloorId(row.getFloorId());
-                item.setFloorName(row.getFloorName());
+                item.setFloorId(primaryRow.getFloorId());
+                item.setFloorName(primaryRow.getFloorName());
                 item.setRooms(new ArrayList<>());
                 return item;
             });
-            floor.getRooms().add(toRoomView(row, deriveState(row, targetDate)));
+            floor.getRooms().add(toRoomView(roomAggregate));
         }
         return new ArrayList<>(floors.values());
     }
 
-    private RoomStatusesTodayRoomVO toRoomView(RoomStatusesTodayRowVO row, DerivedRoomState state) {
+    private RoomStatusesTodayRoomVO toRoomView(RoomAggregate roomAggregate) {
+        RoomStatusesTodayRowVO row = roomAggregate.primaryRow();
+        DerivedRoomState state = roomAggregate.state();
         RoomStatusesTodayRoomVO roomView = new RoomStatusesTodayRoomVO();
         roomView.setRoomId(row.getRoomId());
         roomView.setRoomName(row.getRoomName());
@@ -371,28 +385,33 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
         roomView.setOccupationType(state.occupationType());
         roomView.setOccupationRemark(row.getOrderRemark() == null ? "" : row.getOrderRemark());
         roomView.setGuestName(row.getGuestName() == null ? "" : row.getGuestName());
-        roomView.setOrders(buildOrders(row));
+        roomView.setOrders(buildOrders(roomAggregate.rows()));
         roomView.setRoomCategorySeq(row.getRoomCategorySeq());
         return roomView;
     }
 
-    private List<RoomStatusesTodayOrderVO> buildOrders(RoomStatusesTodayRowVO row) {
-        if (row.getOrderId() == null || row.getOrderId().isBlank()) {
+    private List<RoomStatusesTodayOrderVO> buildOrders(List<RoomStatusesTodayRowVO> rows) {
+        if (rows.isEmpty()) {
             return List.of();
         }
-        RoomStatusesTodayOrderVO order = new RoomStatusesTodayOrderVO();
-        order.setOrderId(row.getOrderId());
-        order.setChannelId(row.getChannelId());
-        order.setChannelName(row.getChannelName());
-        order.setGuestName(row.getGuestName());
-        order.setGuestMobile(row.getGuestMobile());
-        order.setStatus(row.getOrderStatus());
-        order.setRemark(row.getOrderRemark());
-        order.setCheckInDate(toEpochMilli(row.getCheckInAt()));
-        order.setCheckOutDate(toEpochMilli(row.getCheckOutAt()));
-        order.setTotalPriceCent(row.getTotalPriceCent());
-        order.setTotalPayPriceCent(row.getTotalPayPriceCent());
-        return List.of(order);
+        return rows.stream()
+                .filter(row -> row.getOrderId() != null && !row.getOrderId().isBlank())
+                .map(row -> {
+                    RoomStatusesTodayOrderVO order = new RoomStatusesTodayOrderVO();
+                    order.setOrderId(row.getOrderId());
+                    order.setChannelId(row.getChannelId());
+                    order.setChannelName(row.getChannelName());
+                    order.setGuestName(row.getGuestName());
+                    order.setGuestMobile(row.getGuestMobile());
+                    order.setStatus(row.getOrderStatus());
+                    order.setRemark(row.getOrderRemark());
+                    order.setCheckInDate(toEpochMilli(row.getCheckInAt()));
+                    order.setCheckOutDate(toEpochMilli(row.getCheckOutAt()));
+                    order.setTotalPriceCent(row.getTotalPriceCent());
+                    order.setTotalPayPriceCent(row.getTotalPayPriceCent());
+                    return order;
+                })
+                .toList();
     }
 
     private DerivedRoomState deriveState(RoomStatusesTodayRowVO row, LocalDate targetDate) {
@@ -456,8 +475,40 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
         return value != null && value.toLocalDate().isEqual(targetDate);
     }
 
-    private boolean hasFloor(List<RoomStatusesTodayRowVO> rows) {
-        return rows.stream().anyMatch(row -> row.getFloorId() != null && !row.getFloorId().isBlank());
+    private boolean hasFloor(List<RoomAggregate> roomAggregates) {
+        return roomAggregates.stream()
+                .map(RoomAggregate::primaryRow)
+                .anyMatch(row -> row.getFloorId() != null && !row.getFloorId().isBlank());
+    }
+
+    private List<RoomAggregate> aggregateRooms(List<RoomStatusesTodayRowVO> rows, LocalDate targetDate) {
+        Map<String, List<RoomStatusesTodayRowVO>> rowsByRoomId = new LinkedHashMap<>();
+        for (RoomStatusesTodayRowVO row : rows) {
+            rowsByRoomId.computeIfAbsent(row.getRoomId(), ignored -> new ArrayList<>()).add(row);
+        }
+        List<RoomAggregate> roomAggregates = new ArrayList<>();
+        for (List<RoomStatusesTodayRowVO> roomRows : rowsByRoomId.values()) {
+            roomRows.sort(ORDER_PRIORITY);
+            RoomStatusesTodayRowVO primaryRow = roomRows.get(0);
+            roomAggregates.add(new RoomAggregate(primaryRow, List.copyOf(roomRows), deriveState(primaryRow, targetDate)));
+        }
+        return roomAggregates;
+    }
+
+    private static int statusPriority(String orderStatus) {
+        if ("checked_in".equalsIgnoreCase(orderStatus)) {
+            return 1;
+        }
+        if ("booked".equalsIgnoreCase(orderStatus)) {
+            return 2;
+        }
+        if ("pending".equalsIgnoreCase(orderStatus)) {
+            return 3;
+        }
+        if ("refunding".equalsIgnoreCase(orderStatus)) {
+            return 4;
+        }
+        return 9;
     }
 
     private Long resolveAccessibleCampId(Long requestedCampId, Long userId) {
@@ -643,5 +694,12 @@ public class RoomStatusesTodayServiceImpl implements RoomStatusesTodayService {
         int liveDirtyCount() {
             return isLive == 1 && isDirty == 1 ? 1 : 0;
         }
+    }
+
+    private record RoomAggregate(
+            RoomStatusesTodayRowVO primaryRow,
+            List<RoomStatusesTodayRowVO> rows,
+            DerivedRoomState state
+    ) {
     }
 }

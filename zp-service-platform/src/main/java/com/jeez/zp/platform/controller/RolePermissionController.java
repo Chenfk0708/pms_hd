@@ -10,6 +10,7 @@ import com.jeez.zp.platform.dto.request.RoleCampUpdateRequest;
 import com.jeez.zp.platform.security.LoginUserContext;
 import com.jeez.zp.platform.service.RolePermissionService;
 import com.jeez.zp.platform.vo.RoleAuthorityDetailVO;
+import com.jeez.zp.platform.vo.CampRolesResponseVO;
 import com.jeez.zp.platform.vo.RoleCampListVO;
 import com.jeez.zp.platform.vo.RoleSummaryVO;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,17 @@ public class RolePermissionController {
                         request.getPageSize()
                 ),
                 TraceIdFactory.next("role-camp-get")
+        );
+    }
+
+    @PostMapping("/campRoles/get")
+    public HudsonResponse<CampRolesResponseVO> getCampRoleOptions(@RequestBody RoleCampPageRequest request) {
+        return HudsonResponse.success(
+                rolePermissionService.getCampRoleOptions(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId()
+                ),
+                TraceIdFactory.next("camp-roles-get")
         );
     }
 

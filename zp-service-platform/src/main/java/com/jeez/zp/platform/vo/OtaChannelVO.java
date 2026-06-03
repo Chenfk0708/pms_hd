@@ -6,6 +6,7 @@ import lombok.Data;
 public class OtaChannelVO {
 
     private String id;
+    private String accountId;
     private String name;
     private String relation;
     private String status;

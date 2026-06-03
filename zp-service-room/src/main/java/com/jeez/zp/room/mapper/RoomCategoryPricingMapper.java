@@ -12,4 +12,10 @@ public interface RoomCategoryPricingMapper {
             @Param("roomCategoryIds") List<Long> roomCategoryIds,
             @Param("channelIds") List<Long> channelIds
     );
+
+    List<RoomCategoryPricingRowVO> selectRetailRows(
+            @Param("campId") Long campId,
+            @Param("roomCategoryIds") List<Long> roomCategoryIds,
+            @Param("poiIds") List<Long> poiIds
+    );
 }

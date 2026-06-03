@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.IncomeReportMapper">
+
+    <select id="selectOrderRows" resultType="com.jeez.zp.platform.vo.IncomeReportOrderRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            om.order_type AS orderType,
+            om.status AS orderStatus,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.day_num AS dayNum,
+            om.total_price_cent AS totalPriceCent,
+            om.total_pay_price_cent AS totalPayPriceCent,
+            COALESCE(do.commission_price_cent, om.distribution_commission_cent, om.commission_price_cent, 0) AS commissionCent,
+            om.settlement_amount_cent AS settlementAmountCent,
+            p.poi_name AS poiName,
+            ca.channel_name AS channelName,
+            COALESCE(rc.display_name, rc.name) AS roomCategoryName,
+            r.room_name AS roomName
+        FROM order_main om
+        LEFT JOIN distribution_order do ON do.source_order_id = om.order_id
+            AND do.camp_id = om.camp_id
+            AND (do.channel_id = om.channel_id OR do.channel_id IS NULL)
+        LEFT JOIN pms_poi p ON p.poi_id = om.poi_id
+            AND p.camp_id = om.camp_id
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+            AND rc.camp_id = om.camp_id
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = om.camp_id
+        WHERE om.camp_id = #{campId}
+          AND om.is_deleted = 0
+          AND om.order_type IN ('daily_room', 'hour_room')
+          AND om.status NOT IN ('cancelled', 'refunded', 'pending')
+          AND om.start_at &lt; #{rangeEndExclusive}
+          AND om.end_at &gt; #{rangeStart}
+        <if test="poiId != null">
+            AND om.poi_id = #{poiId}
+        </if>
+        <if test="roomCategoryId != null">
+            AND om.room_category_id = #{roomCategoryId}
+        </if>
+        <if test="roomCategoryGroupId != null">
+            AND rc.group_id = #{roomCategoryGroupId}
+        </if>
+        <if test="channelId != null">
+            AND ca.channel_id = #{channelId}
+        </if>
+        <if test="roomId != null">
+            AND om.room_id = #{roomId}
+        </if>
+        ORDER BY om.start_at ASC, om.order_id ASC
+    </select>
+</mapper>

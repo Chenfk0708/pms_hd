@@ -15,6 +15,7 @@ import com.jeez.zp.platform.service.RolePermissionService;
 import com.jeez.zp.platform.vo.CurrentUserBundleVO;
 import com.jeez.zp.platform.vo.PaginationVO;
 import com.jeez.zp.platform.vo.PermissionRowVO;
+import com.jeez.zp.platform.vo.CampRolesResponseVO;
 import com.jeez.zp.platform.vo.RoleAuthorityDetailVO;
 import com.jeez.zp.platform.vo.RoleCampListVO;
 import com.jeez.zp.platform.vo.RolePermissionGrantVO;
@@ -62,6 +63,15 @@ public class RolePermissionServiceImpl implements RolePermissionService {
         RoleCampListVO response = new RoleCampListVO();
         response.setRoles(new ArrayList<>(roles.subList(fromIndex, toIndex)));
         response.setPagination(new PaginationVO(resolvedPageNum, resolvedPageSize, total));
+        return response;
+    }
+
+    @Override
+    public CampRolesResponseVO getCampRoleOptions(Long campId, Long userId) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        CampRolesResponseVO response = new CampRolesResponseVO();
+        response.setRoles(rolePermissionMapper.selectRoleSummaries(resolvedCampId, null));
+        response.setEmployees(rolePermissionMapper.selectCampEmployees(resolvedCampId));
         return response;
     }
 

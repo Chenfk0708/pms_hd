@@ -34,6 +34,7 @@ class RoomCategoryProductQueryIT {
     @Timeout(60)
     void roomCategoryProductsPageGet_shouldReturnPaginatedProductsWithAuthorizedChannels() throws Exception {
         resetProductData();
+        seedRoomCategories();
 
         insertChannelAccount(27301L, 17L, "路客云聚合", "tdd-localhome", "OUT-17-A", "authorized");
         insertChannelAccount(27302L, 5L, "携程", "tdd-ctrip", "OUT-5-A", "authorized");
@@ -126,7 +127,7 @@ class RoomCategoryProductQueryIT {
                 .andExpect(jsonPath("$.data.list[0].title").value("标准大床房预售券"))
                 .andExpect(jsonPath("$.data.list[0].productName").value("标准大床房预售券"))
                 .andExpect(jsonPath("$.data.list[0].roomCategoryId").value("22001"))
-                .andExpect(jsonPath("$.data.list[0].roomCategoryName").value("标准大床房"))
+                .andExpect(jsonPath("$.data.list[0].roomCategoryName").value("TDD Room Product Standard"))
                 .andExpect(jsonPath("$.data.list[0].channelId").value("17"))
                 .andExpect(jsonPath("$.data.list[0].channelName").value("路客云聚合"))
                 .andExpect(jsonPath("$.data.list[0].stock").value(100))
@@ -166,7 +167,7 @@ class RoomCategoryProductQueryIT {
                 .andExpect(jsonPath("$.data.list.length()").value(1))
                 .andExpect(jsonPath("$.data.list[0].productId").value("27702-22002-5"))
                 .andExpect(jsonPath("$.data.list[0].title").value("豪华双床房早餐套餐"))
-                .andExpect(jsonPath("$.data.list[0].roomCategoryName").value("豪华双床房"))
+                .andExpect(jsonPath("$.data.list[0].roomCategoryName").value("TDD Room Product Twin"))
                 .andExpect(jsonPath("$.data.list[0].channelName").value("携程"));
     }
 
@@ -214,6 +215,7 @@ class RoomCategoryProductQueryIT {
 
     private void seedBasicProductData() {
         resetProductData();
+        seedRoomCategories();
 
         insertChannelAccount(27301L, 17L, "路客云聚合", "tdd-localhome", "OUT-17-A", "authorized");
         insertChannelAccount(27302L, 5L, "携程", "tdd-ctrip", "OUT-5-A", "authorized");
@@ -270,6 +272,48 @@ class RoomCategoryProductQueryIT {
         jdbcTemplate.update("DELETE FROM channel_room_category_rel WHERE camp_id = ?", 10001L);
         jdbcTemplate.update("DELETE FROM channel_poi_rel WHERE camp_id = ?", 10001L);
         jdbcTemplate.update("DELETE FROM channel_account WHERE camp_id = ?", 10001L);
+    }
+
+
+    private void seedRoomCategories() {
+        insertRoomCategory(22001L, "TDD Room Product Standard", 1);
+        insertRoomCategory(22002L, "TDD Room Product Twin", 2);
+        insertRoomCategory(22003L, "TDD Room Product Family", 3);
+    }
+
+    private void insertRoomCategory(long roomCategoryId, String name, int sortNo) {
+        jdbcTemplate.update("""
+                        INSERT INTO room_category (
+                            room_category_id,
+                            camp_id,
+                            poi_id,
+                            name,
+                            display_name,
+                            room_count,
+                            status,
+                            sort_no,
+                            is_deleted
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            camp_id = VALUES(camp_id),
+                            poi_id = VALUES(poi_id),
+                            name = VALUES(name),
+                            display_name = VALUES(display_name),
+                            room_count = VALUES(room_count),
+                            status = VALUES(status),
+                            sort_no = VALUES(sort_no),
+                            is_deleted = VALUES(is_deleted)
+                        """,
+                roomCategoryId,
+                10001L,
+                11001L,
+                name,
+                name,
+                1,
+                1,
+                sortNo,
+                0
+        );
     }
 
     private void insertChannelAccount(

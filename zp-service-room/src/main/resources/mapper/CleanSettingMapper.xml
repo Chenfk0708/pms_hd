@@ -66,4 +66,26 @@
           AND DATE(ct.deadline_at) = #{businessDate}
         </if>
     </select>
+
+    <insert id="upsertSetting">
+        INSERT INTO clean_setting (
+            setting_id,
+            camp_id,
+            config_key,
+            config_value,
+            updated_by,
+            updated_at
+        ) VALUES (
+            #{settingId},
+            #{campId},
+            #{configKey},
+            CAST(#{configValue} AS JSON),
+            #{updatedBy},
+            NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            config_value = CAST(#{configValue} AS JSON),
+            updated_by = #{updatedBy},
+            updated_at = NOW()
+    </insert>
 </mapper>

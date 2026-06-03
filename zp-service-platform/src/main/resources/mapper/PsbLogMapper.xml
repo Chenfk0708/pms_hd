@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.PsbLogMapper">
+
+    <sql id="psbLogFilters">
+        FROM order_guest og
+        JOIN order_main om ON om.order_id = og.order_id
+            AND om.is_deleted = 0
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = om.camp_id
+            AND r.is_deleted = 0
+            AND r.status = 1
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        WHERE om.camp_id = #{campId}
+        <if test="poiId != null">
+            AND om.poi_id = #{poiId}
+        </if>
+        <if test="keyword != null">
+            AND (
+                om.order_no LIKE #{keyword}
+                OR om.out_order_no LIKE #{keyword}
+                OR og.guest_name LIKE #{keyword}
+                OR og.guest_mobile LIKE #{keyword}
+                OR r.room_name LIKE #{keyword}
+                OR r.room_no LIKE #{keyword}
+            )
+        </if>
+        <if test="bizType != null">
+            AND '5' = #{bizType}
+        </if>
+        <if test="state != null">
+            AND '0' = #{state}
+        </if>
+    </sql>
+
+    <sql id="psbLogColumns">
+        SELECT
+            CAST(og.id AS CHAR) AS id,
+            og.guest_name AS name,
+            og.guest_name AS guestName,
+            og.guest_mobile AS mobile,
+            og.guest_mobile AS phone,
+            og.guest_id_card AS idCard,
+            og.guest_id_card AS cardNo,
+            COALESCE(r.room_no, r.room_name, '') AS roomNo,
+            COALESCE(ca.channel_name,
+                CASE om.source_type
+                    WHEN 'frontdesk' THEN '前台'
+                    WHEN 'phone' THEN '电话'
+                    WHEN 'channel' THEN '渠道'
+                    ELSE COALESCE(om.source_type, '-')
+                END
+            ) AS channelName,
+            COALESCE(ca.channel_name,
+                CASE om.source_type
+                    WHEN 'frontdesk' THEN '前台'
+                    WHEN 'phone' THEN '电话'
+                    WHEN 'channel' THEN '渠道'
+                    ELSE COALESCE(om.source_type, '-')
+                END
+            ) AS orderSource,
+            om.order_no AS orderNo,
+            COALESCE(om.out_order_no, '') AS channelOrderNo,
+            DATE_FORMAT(om.updated_at, '%Y-%m-%d %H:%i:%s') AS uploadTime,
+            DATE_FORMAT(om.updated_at, '%Y-%m-%d %H:%i:%s') AS reportTime,
+            '5' AS bizType,
+            '0' AS state,
+            '公安回执：待重新上报' AS remark,
+            '公安回执：待重新上报' AS receiptMessage,
+            CAST(om.poi_id AS CHAR) AS poiId
+    </sql>
+
+    <select id="countPage" resultType="long">
+        SELECT COUNT(1)
+        <include refid="psbLogFilters"/>
+    </select>
+
+    <select id="selectPage" resultType="com.jeez.zp.platform.vo.PsbLogRowVO">
+        <include refid="psbLogColumns"/>
+        <include refid="psbLogFilters"/>
+        ORDER BY om.updated_at DESC, og.id DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="selectByGuestIdAndOrderNo" resultType="com.jeez.zp.platform.vo.PsbLogRowVO">
+        <include refid="psbLogColumns"/>
+        FROM order_guest og
+        JOIN order_main om ON om.order_id = og.order_id
+            AND om.is_deleted = 0
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = om.camp_id
+            AND r.is_deleted = 0
+            AND r.status = 1
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        WHERE om.camp_id = #{campId}
+        <if test="guestId != null">
+            AND og.id = #{guestId}
+        </if>
+        <if test="orderNo != null">
+            AND om.order_no = #{orderNo}
+        </if>
+        ORDER BY om.updated_at DESC, og.id DESC
+        LIMIT 1
+    </select>
+</mapper>

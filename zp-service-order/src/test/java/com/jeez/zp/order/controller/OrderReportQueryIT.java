@@ -108,6 +108,7 @@ class OrderReportQueryIT {
 
     private void seedOrders() {
         resetOrders();
+        OrderTestCatalogFixture.ensureBaseCatalog(jdbcTemplate);
         LocalDate today = LocalDate.now(SHANGHAI_ZONE);
         LocalDate yesterday = today.minusDays(1);
         LocalDate tomorrow = today.plusDays(1);

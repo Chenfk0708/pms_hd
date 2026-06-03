@@ -50,6 +50,24 @@ public class RoomCategoryStatusController {
         );
     }
 
+
+    @PostMapping("/roomCategoryStatuses/roomCategory/get")
+    public HudsonResponse<RoomCategoryCentralStatusResponseVO> getRetailStatuses(@RequestBody RoomCategoryStatusRequest request) {
+        return HudsonResponse.success(
+                roomCategoryStatusService.getRetailStatuses(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getRoomCategoryIds(),
+                        request.getPoiIds(),
+                        request.getDate(),
+                        request.getDays(),
+                        request.getPageNum(),
+                        request.getPageSize()
+                ),
+                TraceIdFactory.next("room-category-statuses-room-category-get")
+        );
+    }
+
     private Long parseLong(String value) {
         if (value == null || value.isBlank()) {
             return null;

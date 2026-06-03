@@ -3,6 +3,7 @@ package com.jeez.zp.platform.mapper;
 import com.jeez.zp.platform.vo.OtaAccountQueryRowVO;
 import com.jeez.zp.platform.vo.OtaDetailRoomQueryRowVO;
 import com.jeez.zp.platform.vo.OtaDetailStoreQueryRowVO;
+import com.jeez.zp.platform.vo.OtaLogQueryRowVO;
 import com.jeez.zp.platform.vo.OtaOptionVO;
 import org.apache.ibatis.annotations.Param;
 
@@ -26,4 +27,6 @@ public interface OtaMapper {
             @Param("campId") Long campId,
             @Param("accountIds") List<Long> accountIds
     );
+
+    List<OtaLogQueryRowVO> selectLogRows(@Param("campId") Long campId);
 }

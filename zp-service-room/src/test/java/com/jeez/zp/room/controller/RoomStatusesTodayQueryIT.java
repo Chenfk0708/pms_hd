@@ -131,6 +131,67 @@ class RoomStatusesTodayQueryIT {
 
     @Test
     @Timeout(60)
+    void roomStatusesTodayGet_shouldIncludeCompletedOrdersForTargetDate() throws Exception {
+        seedRoomStatusesTodayScene();
+        insertOrderMain(123624L, 123522L, 123222L, 123424L, "completed", "paid", "赵六", "13900000004",
+                TARGET_DATE, TARGET_DATE.plusDays(1), TARGET_DATE.minusDays(1).atTime(12, 0), null);
+
+        mockMvc.perform(post("/roomStatusesToday/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "storeId":"123121",
+                                  "date":"2026-05-18",
+                                  "viewMode":"按房间号",
+                                  "keyword":"赵六"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.roomViews.length()").value(1))
+                .andExpect(jsonPath("$.data.roomViews[0].roomId").value("123424"))
+                .andExpect(jsonPath("$.data.roomViews[0].guestName").value("赵六"))
+                .andExpect(jsonPath("$.data.roomViews[0].orders[0].orderId").value("123624"))
+                .andExpect(jsonPath("$.data.roomViews[0].orders[0].status").value("completed"));
+    }
+
+    @Test
+    @Timeout(60)
+    void roomStatusesTodayGet_shouldKeepAllOrdersWhenSameRoomHasMultipleOrders() throws Exception {
+        seedRoomStatusesTodayScene();
+        insertOrderMain(123625L, 123521L, 123222L, 123424L, "booked", "paid", "PRIMARY-GUEST", "13900000005",
+                TARGET_DATE, TARGET_DATE.plusDays(1), TARGET_DATE.minusDays(1).atTime(8, 0), null);
+        insertOrderMain(123626L, 123522L, 123222L, 123424L, "booked", "paid", "SECONDARY-GUEST", "13900000006",
+                TARGET_DATE, TARGET_DATE.plusDays(1), TARGET_DATE.minusDays(1).atTime(9, 0), null);
+
+        mockMvc.perform(post("/roomStatusesToday/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "poiIds":["123121"],
+                                  "date":"2026-05-18",
+                                  "queryCode":2,
+                                  "keyword":"SECONDARY-GUEST"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.roomViews.length()").value(1))
+                .andExpect(jsonPath("$.data.roomViews[0].roomId").value("123424"))
+                .andExpect(jsonPath("$.data.roomViews[0].guestName").value("PRIMARY-GUEST"))
+                .andExpect(jsonPath("$.data.roomViews[0].orders.length()").value(2))
+                .andExpect(jsonPath("$.data.roomViews[0].orders[0].orderId").value("123625"))
+                .andExpect(jsonPath("$.data.roomViews[0].orders[1].orderId").value("123626"));
+    }
+
+    @Test
+    @Timeout(60)
     void roomStatusesTodayGet_shouldFallbackInvalidCampIdForFloorViewAndRejectForeignCamp() throws Exception {
         seedRoomStatusesTodayScene();
 

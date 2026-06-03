@@ -172,4 +172,50 @@ class PlatformBootstrapControllerIT {
                 .andExpect(jsonPath("$.data.priceText").value("¥0 / 演示环境"))
                 .andExpect(jsonPath("$.data.connectorProgress").value("2/2 已连接"));
     }
+
+    @Test
+    @Timeout(60)
+    void versionSubscriptionOrderSubmit_shouldReturnRedirectContract() throws Exception {
+        mockMvc.perform(post("/version/subscription/order/submit")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "editionId":"9",
+                                  "duration":"2y",
+                                  "quantity":2
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.data.message").value("\u7545\u4eab\u7248\u8d2d\u4e70\u4fe1\u606f\u5df2\u751f\u6210"))
+                .andExpect(jsonPath("$.data.redirectTo").value("/version/applicationPayment/detail?plan=delight&duration=2y"))
+                .andExpect(jsonPath("$.data.orderNo").exists());
+    }
+
+    @Test
+    @Timeout(60)
+    void versionSubscriptionOrderSubmit_shouldRejectForeignCamp() throws Exception {
+        mockMvc.perform(post("/version/subscription/order/submit")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10002",
+                                  "editionId":"9",
+                                  "duration":"2y",
+                                  "quantity":2
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40301))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.timestamp").exists());
+    }
+
 }

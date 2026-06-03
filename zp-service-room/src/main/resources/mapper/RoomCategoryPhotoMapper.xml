@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.room.mapper.RoomCategoryPhotoMapper">
+
+    <select id="countRoomCategory" resultType="int">
+        SELECT COUNT(1)
+        FROM room_category
+        WHERE camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND status = 1
+          AND is_deleted = 0
+    </select>
+
+    <insert id="insertMediaResource">
+        INSERT INTO media_resource (
+            media_resource_id,
+            camp_id,
+            path,
+            name,
+            is_dir,
+            format,
+            size_bytes,
+            url,
+            biz_type,
+            is_deleted
+        ) VALUES (
+            #{mediaResourceId},
+            #{campId},
+            #{path},
+            #{name},
+            0,
+            #{format},
+            #{sizeBytes},
+            #{url},
+            #{bizType},
+            0
+        )
+    </insert>
+
+    <select id="selectNextSortNo" resultType="int">
+        SELECT COALESCE(MAX(sort_no), 0) + 1
+        FROM room_category_media
+        WHERE camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND scene_type = #{sceneType}
+          AND status = 1
+    </select>
+
+    <insert id="insertRoomCategoryMedia">
+        INSERT INTO room_category_media (
+            media_id,
+            camp_id,
+            room_category_id,
+            media_resource_id,
+            media_type,
+            media_url,
+            scene_type,
+            sort_no,
+            status
+        ) VALUES (
+            #{mediaId},
+            #{campId},
+            #{roomCategoryId},
+            #{mediaResourceId},
+            'image',
+            #{mediaUrl},
+            #{sceneType},
+            #{sortNo},
+            1
+        )
+    </insert>
+</mapper>

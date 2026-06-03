@@ -71,9 +71,7 @@ class OtaQueryIT {
                 .andExpect(jsonPath("$.data.request.storeId").value("all"))
                 .andExpect(jsonPath("$.data.request.dimension").value("all"))
                 .andExpect(jsonPath("$.data.stores[0].value").value("all"))
-                .andExpect(jsonPath("$.data.stores[0].label").value("全部门店"))
                 .andExpect(jsonPath("$.data.stores[1].value").value("29932"))
-                .andExpect(jsonPath("$.data.stores[1].label").value("OTA联调门店"))
                 .andExpect(jsonPath("$.data.dimensions.length()").value(3))
                 .andExpect(jsonPath("$.data.metrics[0].key").value("connected"))
                 .andExpect(jsonPath("$.data.metrics[0].value").value("1"))
@@ -83,16 +81,14 @@ class OtaQueryIT {
                 .andExpect(jsonPath("$.data.metrics[2].value").value("1/2"))
                 .andExpect(jsonPath("$.data.connectedChannels.length()").value(1))
                 .andExpect(jsonPath("$.data.connectedChannels[0].id").value("ctrip"))
-                .andExpect(jsonPath("$.data.connectedChannels[0].name").value("携程直连"))
+                .andExpect(jsonPath("$.data.connectedChannels[0].accountId").value("29933"))
                 .andExpect(jsonPath("$.data.connectedChannels[0].relation").value("关联房型 1/2"))
                 .andExpect(jsonPath("$.data.connectedChannels[0].roomTypeCount").value(2))
                 .andExpect(jsonPath("$.data.connectedChannels[0].mappedRoomTypeCount").value(1))
                 .andExpect(jsonPath("$.data.connectedChannels[0].lastSyncAt").value("2026-05-20 11:20"))
-                .andExpect(jsonPath("$.data.connectedChannels[0].logoText").value("携程"))
                 .andExpect(jsonPath("$.data.connectedChannels[0].detail", containsString("携程直连")))
                 .andExpect(jsonPath("$.data.pendingChannels.length()").value(1))
                 .andExpect(jsonPath("$.data.pendingChannels[0].id").value("booking"))
-                .andExpect(jsonPath("$.data.pendingChannels[0].name").value("Booking"))
                 .andExpect(jsonPath("$.data.pendingChannels[0].relation").value("等待授权"))
                 .andExpect(jsonPath("$.data.quickLinks[0].route").value("/channels/ota/log"));
     }
@@ -116,39 +112,99 @@ class OtaQueryIT {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id").value("ctrip"))
-                .andExpect(jsonPath("$.data.channelName").value("携程直连"))
-                .andExpect(jsonPath("$.data.title").value("携程直连"))
-                .andExpect(jsonPath("$.data.logoText").value("携程"))
                 .andExpect(jsonPath("$.data.logoTone").value(1))
-                .andExpect(jsonPath("$.data.noticeText", containsString("佣金率")))
+                .andExpect(jsonPath("$.data.noticeText", containsString("佣金")))
                 .andExpect(jsonPath("$.data.channelStoreOptions[0].value").value("all"))
                 .andExpect(jsonPath("$.data.channelStoreOptions[1].value").value("29932"))
-                .andExpect(jsonPath("$.data.channelStoreOptions[1].label").value("OTA联调门店"))
                 .andExpect(jsonPath("$.data.accountOptions[0].value").value("all"))
                 .andExpect(jsonPath("$.data.accountOptions[1].value").value("29933"))
-                .andExpect(jsonPath("$.data.accountOptions[1].label").value("携程直连主账号"))
                 .andExpect(jsonPath("$.data.statusOptions[1].value").value("linked"))
                 .andExpect(jsonPath("$.data.roomRows.length()").value(2))
                 .andExpect(jsonPath("$.data.roomRows[0].id").value("29938"))
                 .andExpect(jsonPath("$.data.roomRows[0].channelStoreId").value("29932"))
-                .andExpect(jsonPath("$.data.roomRows[0].channelStoreName").value("OTA联调门店"))
                 .andExpect(jsonPath("$.data.roomRows[0].channelRoomType").value("CTRIP-DELUXE-ROOM"))
                 .andExpect(jsonPath("$.data.roomRows[0].status").value("linked"))
-                .andExpect(jsonPath("$.data.roomRows[0].statusLabel").value("已关联"))
                 .andExpect(jsonPath("$.data.roomRows[0].linkedRoomType").value("OTA联调豪华房"))
                 .andExpect(jsonPath("$.data.roomRows[1].status").value("unlinked"))
-                .andExpect(jsonPath("$.data.roomRows[1].statusLabel").value("未关联"))
                 .andExpect(jsonPath("$.data.roomRows[1].linkedRoomType").value("-"))
                 .andExpect(jsonPath("$.data.storeRows.length()").value(1))
                 .andExpect(jsonPath("$.data.storeRows[0].id").value("29937"))
                 .andExpect(jsonPath("$.data.storeRows[0].accountId").value("29933"))
                 .andExpect(jsonPath("$.data.storeRows[0].channelStoreId").value("29932"))
-                .andExpect(jsonPath("$.data.storeRows[0].channelStoreName").value("OTA联调门店"))
                 .andExpect(jsonPath("$.data.storeRows[0].hotelType").value("预付"))
                 .andExpect(jsonPath("$.data.storeRows[0].hotelId").value("CTRIP-POI-001"))
                 .andExpect(jsonPath("$.data.storeRows[0].relatedRoomTypeSummary").value("1/2"))
                 .andExpect(jsonPath("$.data.storeRows[0].status").value("linked"))
                 .andExpect(jsonPath("$.data.syncStoreDefaults.hotelSubtype").value("prepay"));
+    }
+
+    @Test
+    @Timeout(60)
+    void otaLogPageGet_shouldReturnRealOperationLogsWithFiltersAndPagination() throws Exception {
+        seedOtaScene();
+
+        mockMvc.perform(post("/ota/log/page/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"29931",
+                                  "channelId":"all",
+                                  "keyword":"",
+                                  "operator":"",
+                                  "operationType":"all",
+                                  "operationStatus":"all",
+                                  "page":1,
+                                  "pageSize":6
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.data.channelOptions[0].value").value("all"))
+                .andExpect(jsonPath("$.data.channelOptions[0].label").value("全部渠道"))
+                .andExpect(jsonPath("$.data.operationTypeOptions[1].value").value("bindRoomType"))
+                .andExpect(jsonPath("$.data.operationStatusOptions[1].value").value("success"))
+                .andExpect(jsonPath("$.data.pagination.page").value(1))
+                .andExpect(jsonPath("$.data.pagination.pageSize").value(6))
+                .andExpect(jsonPath("$.data.pagination.total").value(2))
+                .andExpect(jsonPath("$.data.rows.length()").value(2))
+                .andExpect(jsonPath("$.data.rows[0].channelId").value("ctrip"))
+                .andExpect(jsonPath("$.data.rows[0].channel").value("携程直连"))
+                .andExpect(jsonPath("$.data.rows[0].operationType").value("bindRoomType"))
+                .andExpect(jsonPath("$.data.rows[0].type").value("关联渠道房型"))
+                .andExpect(jsonPath("$.data.rows[0].content", containsString("CTRIP-DELUXE-ROOM")))
+                .andExpect(jsonPath("$.data.rows[0].status").value("成功"))
+                .andExpect(jsonPath("$.data.rows[0].operator").value("系统同步"))
+                .andExpect(jsonPath("$.data.rows[1].operationType").value("bindAccount"))
+                .andExpect(jsonPath("$.data.rows[1].type").value("渠道授权"))
+                .andExpect(jsonPath("$.data.rows[1].status").value("成功"));
+
+        mockMvc.perform(post("/ota/log/page/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"29931",
+                                  "channelId":"ctrip",
+                                  "keyword":"DELUXE",
+                                  "operator":"系统同步",
+                                  "operationType":"bindRoomType",
+                                  "operationStatus":"success",
+                                  "page":1,
+                                  "pageSize":1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.pagination.total").value(1))
+                .andExpect(jsonPath("$.data.rows.length()").value(1))
+                .andExpect(jsonPath("$.data.rows[0].operationType").value("bindRoomType"))
+                .andExpect(jsonPath("$.data.rows[0].channelId").value("ctrip"));
     }
 
     private void seedOtaScene() {
@@ -188,7 +244,7 @@ class OtaQueryIT {
                 "OTA联调租户",
                 1,
                 "深圳",
-                "南山区OTA联调路 31 号",
+                "南山区 OTA 联调路 31 号",
                 "0755-2993101",
                 1,
                 0

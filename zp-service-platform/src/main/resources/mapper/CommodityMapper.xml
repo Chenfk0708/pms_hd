@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.platform.mapper.CommodityMapper">
+
+    <select id="selectCommodityDetail" resultType="com.jeez.zp.platform.vo.CommodityDetailRowVO">
+        SELECT
+            gm.goods_id AS goodsId,
+            gm.name AS commodityName,
+            gm.description AS description,
+            (
+                SELECT COALESCE(m.media_url, mr.url)
+                FROM goods_room_category_rel rel
+                JOIN room_category_media m ON m.room_category_id = rel.room_category_id
+                    AND m.status = 1
+                LEFT JOIN media_resource mr ON mr.media_resource_id = m.media_resource_id
+                    AND mr.is_deleted = 0
+                WHERE rel.goods_id = gm.goods_id
+                ORDER BY CASE WHEN m.scene_type = 'cover' THEN 0 ELSE 1 END, m.sort_no ASC, m.media_id ASC
+                LIMIT 1
+            ) AS mainPhoto,
+            gm.selling_price_cent AS sellingPriceCent,
+            gm.original_price_cent AS originalPriceCent,
+            gm.settlement_price_cent AS settlementPriceCent,
+            (
+                SELECT gs.sku_name
+                FROM goods_sku gs
+                WHERE gs.goods_id = gm.goods_id
+                  AND gs.is_deleted = 0
+                  AND gs.status = 'published'
+                ORDER BY gs.sort_no ASC, gs.goods_sku_id ASC
+                LIMIT 1
+            ) AS purchaseTermLabel
+        FROM goods_main gm
+        WHERE gm.camp_id = #{catalogCampId}
+          AND gm.goods_id = #{goodsId}
+          AND gm.is_deleted = 0
+          AND gm.status = 'published'
+        LIMIT 1
+    </select>
+
+    <select id="selectRoomCategoryIds" resultType="long">
+        SELECT rel.room_category_id
+        FROM goods_room_category_rel rel
+        WHERE rel.goods_id = #{goodsId}
+        ORDER BY rel.id ASC
+    </select>
+</mapper>

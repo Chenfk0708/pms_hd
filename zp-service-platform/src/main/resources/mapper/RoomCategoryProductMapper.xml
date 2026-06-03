@@ -73,4 +73,190 @@
         ORDER BY dp.distribution_product_id ASC, rc.room_category_id ASC, cb.sort_account_id ASC, cb.channel_id ASC
         LIMIT #{offset}, #{pageSize}
     </select>
+
+    <sql id="channelRoomCategoryV2From">
+        FROM (
+            SELECT
+                gm.goods_id AS goodsId,
+                gm.goods_type AS rawGoodsType,
+                gm.name AS channelRoomCategoryName,
+                gm.category_id AS categoryId,
+                gm.category_name AS categoryName,
+                gm.room_category_type AS roomCategoryType,
+                gm.stock_mode AS stockMode,
+                CASE
+                    WHEN gm.shelf_status = 'on_shelf'
+                        AND (gm.stock_mode = 'unlimited' OR COALESCE(sku.stock_sum, gm.stock, 0) &gt; 0)
+                        THEN 'selling'
+                    WHEN gm.shelf_status = 'on_shelf'
+                        THEN 'soldOut'
+                    ELSE 'warehouse'
+                END AS rawShelfStatus,
+                COALESCE(sku.stock_sum, gm.stock, 0) AS totalStock,
+                COALESCE(sold.sold_count, 0) AS soldCount,
+                COALESCE(sku.lowest_selling_price, gm.selling_price_cent, 0) AS lowestSellingPrice,
+                COALESCE(sku.lowest_original_price, gm.original_price_cent, gm.selling_price_cent, 0) AS lowestOriginalPrice,
+                ch.channel_ids_csv AS channelIdsCsv,
+                ch.channel_names_csv AS channelNamesCsv,
+                DATE_FORMAT(gm.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+                DATE_FORMAT(gm.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt,
+                gm.description AS description,
+                gm.refund_rule AS refundRule,
+                CASE
+                    WHEN gm.remark REGEXP '^sort:[0-9]+$' THEN CAST(SUBSTRING(gm.remark, 6) AS UNSIGNED)
+                    ELSE 2147483647
+                END AS sortNo
+            FROM goods_main gm
+            JOIN goods_room_category_rel grr ON grr.goods_id = gm.goods_id
+            JOIN room_category rc ON rc.room_category_id = grr.room_category_id
+                AND rc.camp_id = gm.camp_id
+                AND rc.status = 1
+                AND rc.is_deleted = 0
+            LEFT JOIN (
+                SELECT
+                    gs.goods_id AS goods_id,
+                    SUM(gs.stock) AS stock_sum,
+                    MIN(gs.selling_price_cent) AS lowest_selling_price,
+                    MIN(COALESCE(gs.original_price_cent, gs.selling_price_cent)) AS lowest_original_price
+                FROM goods_sku gs
+                WHERE gs.is_deleted = 0
+                  AND gs.status = 'published'
+                GROUP BY gs.goods_id
+            ) sku ON sku.goods_id = gm.goods_id
+            LEFT JOIN (
+                SELECT
+                    ch0.camp_id,
+                    ch0.room_category_id,
+                    GROUP_CONCAT(CAST(ch0.channel_id AS CHAR) ORDER BY ch0.channel_id ASC SEPARATOR ',') AS channel_ids_csv,
+                    GROUP_CONCAT(ch0.channel_name ORDER BY ch0.channel_id ASC SEPARATOR '||') AS channel_names_csv
+                FROM (
+                    SELECT
+                        rel.camp_id,
+                        rel.room_category_id,
+                        ca.channel_id,
+                        ca.channel_name
+                    FROM channel_room_category_rel rel
+                    JOIN channel_account ca ON ca.account_id = rel.account_id
+                        AND ca.camp_id = rel.camp_id
+                    WHERE ca.status = 'authorized'
+                      AND rel.audit_status = 'approved'
+                    GROUP BY rel.camp_id, rel.room_category_id, ca.channel_id, ca.channel_name
+                ) ch0
+                GROUP BY ch0.camp_id, ch0.room_category_id
+            ) ch ON ch.camp_id = gm.camp_id
+                AND ch.room_category_id = rc.room_category_id
+            LEFT JOIN (
+                SELECT
+                    om.goods_id,
+                    SUM(COALESCE(om.day_num, 1)) AS sold_count
+                FROM order_main om
+                WHERE om.camp_id = #{campId}
+                  AND om.is_deleted = 0
+                  AND om.goods_id IS NOT NULL
+                  AND om.status NOT IN ('cancelled', 'refunded', 'pending')
+                GROUP BY om.goods_id
+            ) sold ON sold.goods_id = gm.goods_id
+            WHERE gm.camp_id = #{campId}
+              AND gm.is_deleted = 0
+            <if test="roomCategoryTypes != null and !roomCategoryTypes.isEmpty()">
+                AND gm.room_category_type IN
+                <foreach collection="roomCategoryTypes" item="roomCategoryType" open="(" separator="," close=")">
+                    #{roomCategoryType}
+                </foreach>
+            </if>
+            <if test="categoryIds != null and !categoryIds.isEmpty()">
+                AND gm.category_id IN
+                <foreach collection="categoryIds" item="categoryId" open="(" separator="," close=")">
+                    #{categoryId}
+                </foreach>
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    gm.name LIKE CONCAT('%', #{keyword}, '%')
+                    OR gm.category_name LIKE CONCAT('%', #{keyword}, '%')
+                    OR gm.description LIKE CONCAT('%', #{keyword}, '%')
+                    OR rc.name LIKE CONCAT('%', #{keyword}, '%')
+                )
+            </if>
+            <if test="poiIds != null and !poiIds.isEmpty()">
+                AND rc.poi_id IN
+                <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                    #{poiId}
+                </foreach>
+            </if>
+            <if test="channelIds != null and !channelIds.isEmpty()">
+                AND EXISTS (
+                    SELECT 1
+                    FROM channel_room_category_rel rel_filter
+                    JOIN channel_account ca_filter ON ca_filter.account_id = rel_filter.account_id
+                        AND ca_filter.camp_id = rel_filter.camp_id
+                    WHERE rel_filter.camp_id = gm.camp_id
+                      AND rel_filter.room_category_id = rc.room_category_id
+                      AND ca_filter.status = 'authorized'
+                      AND rel_filter.audit_status = 'approved'
+                      AND ca_filter.channel_id IN
+                      <foreach collection="channelIds" item="channelId" open="(" separator="," close=")">
+                          #{channelId}
+                      </foreach>
+                )
+            </if>
+        ) src
+        WHERE 1 = 1
+        <if test="shelfStatuses != null and !shelfStatuses.isEmpty()">
+            AND src.rawShelfStatus IN
+            <foreach collection="shelfStatuses" item="shelfStatus" open="(" separator="," close=")">
+                #{shelfStatus}
+            </foreach>
+        </if>
+    </sql>
+
+    <select id="countChannelRoomCategoryPageV2" resultType="long">
+        SELECT COUNT(1)
+        <include refid="channelRoomCategoryV2From"/>
+    </select>
+
+    <select id="selectChannelRoomCategoryPageV2" resultType="com.jeez.zp.platform.vo.ChannelRoomCategoryPageRowVO">
+        SELECT
+            src.goodsId,
+            src.rawGoodsType,
+            src.channelRoomCategoryName,
+            src.categoryId,
+            src.categoryName,
+            src.roomCategoryType,
+            src.stockMode,
+            src.rawShelfStatus,
+            src.totalStock,
+            src.soldCount,
+            src.lowestSellingPrice,
+            src.lowestOriginalPrice,
+            src.channelIdsCsv,
+            src.channelNamesCsv,
+            src.createdAt,
+            src.updatedAt,
+            src.description,
+            src.refundRule,
+            src.sortNo
+        <include refid="channelRoomCategoryV2From"/>
+        ORDER BY src.sortNo ASC, src.goodsId ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="selectChannelRoomCategoryProductRows" resultType="com.jeez.zp.platform.vo.ChannelRoomCategoryProductVO">
+        SELECT
+            gs.goods_id AS goodsIdValue,
+            CAST(gs.goods_sku_id AS CHAR) AS roomCategoryProductId,
+            gs.sku_name AS roomCategoryProductName,
+            gs.selling_price_cent AS sellingPrice,
+            COALESCE(gs.original_price_cent, gs.selling_price_cent) AS originalPrice,
+            gs.stock AS stock
+        FROM goods_sku gs
+        WHERE gs.is_deleted = 0
+          AND gs.status = 'published'
+          AND gs.goods_id IN
+          <foreach collection="goodsIds" item="goodsId" open="(" separator="," close=")">
+              #{goodsId}
+          </foreach>
+        ORDER BY gs.goods_id ASC, gs.sort_no ASC, gs.goods_sku_id ASC
+    </select>
+
 </mapper>

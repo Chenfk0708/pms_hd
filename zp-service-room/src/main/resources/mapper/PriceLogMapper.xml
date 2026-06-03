@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.room.mapper.PriceLogMapper">
+
+    <select id="selectRows" resultType="com.jeez.zp.room.vo.PriceLogRowVO">
+        SELECT
+            rps.id AS snapshotId,
+            rps.room_category_id AS roomCategoryId,
+            rps.channel_id AS channelId,
+            rps.price_type AS priceType,
+            CONCAT('PL', rps.id) AS logId,
+            rc.name AS roomCategoryName,
+            DATE_FORMAT(rps.biz_date, '%Y-%m-%d') AS priceDate,
+            ca.channel_name AS channelName,
+            rps.price_cent AS channelSalePrice,
+            DATE_FORMAT(rps.updated_at, '%Y-%m-%d %H:%i:%s') AS operationTime,
+            (
+                SELECT prev.price_cent
+                FROM room_price_snapshot prev
+                WHERE prev.camp_id = rps.camp_id
+                  AND prev.poi_id = rps.poi_id
+                  AND prev.room_category_id = rps.room_category_id
+                  AND prev.price_type = rps.price_type
+                  AND prev.channel_id = rps.channel_id
+                  AND prev.biz_date &lt; rps.biz_date
+                ORDER BY prev.biz_date DESC, prev.updated_at DESC, prev.id DESC
+                LIMIT 1
+            ) AS previousPriceCent
+        FROM room_price_snapshot rps
+        JOIN room_category rc ON rc.room_category_id = rps.room_category_id
+            AND rc.camp_id = rps.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        LEFT JOIN (
+            SELECT camp_id, channel_id, MIN(channel_name) AS channel_name
+            FROM channel_account
+            WHERE status = 'authorized'
+            GROUP BY camp_id, channel_id
+        ) ca ON ca.camp_id = rps.camp_id
+            AND ca.channel_id = rps.channel_id
+        WHERE rps.camp_id = #{campId}
+          AND rps.status = 'active'
+        <if test="keyword != null and keyword != ''">
+            AND (
+                rc.name LIKE CONCAT('%', #{keyword}, '%')
+                OR CAST(rps.id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                OR rps.price_type LIKE CONCAT('%', #{keyword}, '%')
+                OR ca.channel_name LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="channelId != null">
+            AND rps.channel_id = #{channelId}
+        </if>
+        <if test="adjustmentStart != null">
+            AND rps.biz_date &gt;= #{adjustmentStart}
+        </if>
+        <if test="adjustmentEnd != null">
+            AND rps.biz_date &lt;= #{adjustmentEnd}
+        </if>
+        <if test="operationStart != null">
+            AND rps.updated_at &gt;= #{operationStart}
+        </if>
+        <if test="operationEndExclusive != null">
+            AND rps.updated_at &lt; #{operationEndExclusive}
+        </if>
+        ORDER BY rps.updated_at DESC, rps.id DESC
+    </select>
+
+    <select id="selectChannelOptions" resultType="com.jeez.zp.room.vo.PriceLogOptionVO">
+        SELECT
+            ca.channel_name AS label,
+            CAST(ca.channel_id AS CHAR) AS value
+        FROM channel_account ca
+        WHERE ca.camp_id = #{campId}
+          AND ca.status = 'authorized'
+        GROUP BY ca.channel_id, ca.channel_name
+        ORDER BY ca.channel_id ASC
+    </select>
+</mapper>

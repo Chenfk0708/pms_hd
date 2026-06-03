@@ -98,6 +98,8 @@ nul
 *.tmp
 *.temp
 .temp/
+tmp/
+.tmp_gateway_token.txt
 
 # =============================
 # CMake

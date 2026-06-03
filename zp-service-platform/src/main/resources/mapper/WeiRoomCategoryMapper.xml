@@ -55,7 +55,11 @@
                   AND dp.status = 1
                 ORDER BY dp.distribution_product_id ASC
                 LIMIT 1
-            ) AS CHAR) AS applyId
+            ) AS CHAR) AS applyId,
+            CASE
+                WHEN gm.remark REGEXP '^sort:[0-9]+$' THEN CAST(SUBSTRING(gm.remark, 6) AS UNSIGNED)
+                ELSE 2147483647
+            END AS sortNo
         FROM goods_main gm
         WHERE gm.camp_id = #{campId}
           AND gm.is_deleted = 0
@@ -72,7 +76,7 @@
                 OR gm.description LIKE CONCAT('%', #{keyword}, '%')
             )
         </if>
-        ORDER BY gm.goods_id ASC
+        ORDER BY sortNo ASC, gm.goods_id ASC
     </select>
 
     <select id="selectProductRows" resultType="com.jeez.zp.platform.vo.WeiRoomCategoryProductRowVO">

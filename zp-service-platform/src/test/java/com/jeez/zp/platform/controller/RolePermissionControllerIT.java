@@ -69,4 +69,23 @@ class RolePermissionControllerIT {
                 .andExpect(jsonPath("$.data.permissionRows[0].moduleName").value("工作台"))
                 .andExpect(jsonPath("$.data.permissionRows[0].permissions[0]").value("查看"));
     }
+
+    @Test
+    @Timeout(60)
+    void campRolesGet_shouldReturnEmployeeOptionsForShiftPages() throws Exception {
+        mockMvc.perform(post("/campRoles/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campId":"10001"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.data.employees[0].userId").value("12001"))
+                .andExpect(jsonPath("$.data.employees[0].displayName").value("系统管理员"))
+                .andExpect(jsonPath("$.data.roles[?(@.roleId == 13001)].roleName").value("系统管理员"));
+    }
 }

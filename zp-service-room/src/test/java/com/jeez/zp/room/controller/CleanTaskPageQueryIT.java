@@ -126,6 +126,7 @@ class CleanTaskPageQueryIT {
 
     private void seedCleanTasks() {
         resetCleanTasks();
+        RoomCleanTestCatalogFixture.ensureBaseCatalog(jdbcTemplate);
         insertCleanStaff(128101L, "Room Cleaner A", "13800001001");
         insertCleanStaff(128102L, "Room Cleaner B", "13800001002");
         insertCleanTask(128201L, 11001L, 23002L, 22001L, 128101L, "checkout_clean", "pending", "room 102 checkout pending", "2026-05-18 14:00:00");
