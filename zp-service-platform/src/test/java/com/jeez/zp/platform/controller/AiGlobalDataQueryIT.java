@@ -189,6 +189,97 @@ class AiGlobalDataQueryIT {
                 .andExpect(jsonPath("$.data.guidance.length()").value(3));
     }
 
+
+    @Test
+    @Timeout(60)
+    void globalRadarExportCreate_shouldReturnExportTaskFromRealAiGlobalData() throws Exception {
+        seedAiGlobalScene();
+
+        mockMvc.perform(post("/globalRadar/export/create")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"29101",
+                                  "channel":"meituan",
+                                  "attention":"high",
+                                  "roomKeyword":"AI"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.data.taskId").value("AI-GLOBAL-EXPORT-29101"))
+                .andExpect(jsonPath("$.data.fileName").value("ai-global-radar-29101.csv"))
+                .andExpect(jsonPath("$.data.contentType").value("text/csv;charset=UTF-8"))
+                .andExpect(jsonPath("$.data.downloadUrl").value("/api/globalRadar/export/download?campId=29101"))
+                .andExpect(jsonPath("$.data.total").value(3));
+    }
+
+    @Test
+    @Timeout(60)
+    void globalRadarStrongReminderActions_shouldValidateOrderCampAndReturnPersistedActionResult() throws Exception {
+        seedAiGlobalScene();
+
+        mockMvc.perform(post("/globalRadar/strongReminder/postpone")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"29101",
+                                  "reminderId":"29172",
+                                  "orderNo":"OUT-ORDER-29172"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.data.reminderId").value("29172"))
+                .andExpect(jsonPath("$.data.orderNo").value("OUT-ORDER-29172"))
+                .andExpect(jsonPath("$.data.status").value("postponed"))
+                .andExpect(jsonPath("$.data.message").value("strong reminder postponed"));
+
+        mockMvc.perform(post("/globalRadar/strongReminder/resolve")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"29101",
+                                  "reminderId":"29173",
+                                  "orderNo":"OUT-ORDER-29173"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.reminderId").value("29173"))
+                .andExpect(jsonPath("$.data.orderNo").value("OUT-ORDER-29173"))
+                .andExpect(jsonPath("$.data.status").value("resolved"))
+                .andExpect(jsonPath("$.data.message").value("strong reminder resolved"));
+
+        mockMvc.perform(post("/globalRadar/strongReminder/resolve")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"29101",
+                                  "reminderId":"999999",
+                                  "orderNo":"OUT-ORDER-999999"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40404))
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
     private void seedAiGlobalScene() {
         insertCamp();
         rebindCurrentUserCamp();

@@ -344,6 +344,19 @@
         ORDER BY r.sort_no ASC, r.room_id ASC
     </select>
 
+    <select id="selectActiveRoomsByCategory" resultType="com.jeez.zp.platform.vo.RoomCategoryRoomRowVO">
+        SELECT
+            r.room_id AS roomId,
+            r.room_name AS roomName,
+            r.sort_no AS sortNo
+        FROM room r
+        WHERE r.camp_id = #{campId}
+          AND r.room_category_id = #{roomCategoryId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+        ORDER BY r.sort_no ASC, r.room_id ASC
+    </select>
+
     <update id="disableLinkages">
         UPDATE room_category_linkage
         SET status = 0,
@@ -584,6 +597,46 @@
           AND is_deleted = 0
     </update>
 
+    <update id="deleteRoomsByIds">
+        UPDATE room
+        SET status = 0,
+            is_deleted = 1,
+            room_name = CONCAT('deleted-', room_id),
+            room_no = CONCAT('deleted-', room_id),
+            updated_by = #{userId},
+            updated_at = CURRENT_TIMESTAMP,
+            version_no = version_no + 1
+        WHERE camp_id = #{campId}
+          AND is_deleted = 0
+          AND room_id IN
+          <foreach collection="roomIds" item="roomId" open="(" separator="," close=")">
+              #{roomId}
+          </foreach>
+    </update>
+
+    <select id="countCurrentOrFutureOrdersByCategory" resultType="int">
+        SELECT COUNT(1)
+        FROM order_main
+        WHERE camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND status IN ('pending', 'booked', 'checked_in', 'refunding')
+          AND end_at >= CURRENT_DATE
+          AND is_deleted = 0
+    </select>
+
+    <select id="countCurrentOrFutureOrdersByRooms" resultType="int">
+        SELECT COUNT(1)
+        FROM order_main
+        WHERE camp_id = #{campId}
+          AND room_id IN
+          <foreach collection="roomIds" item="roomId" open="(" separator="," close=")">
+              #{roomId}
+          </foreach>
+          AND status IN ('pending', 'booked', 'checked_in', 'refunding')
+          AND end_at >= CURRENT_DATE
+          AND is_deleted = 0
+    </select>
+
     <delete id="deleteCleanTasksByCategory">
         DELETE FROM clean_task
         WHERE camp_id = #{campId}
@@ -632,4 +685,19 @@
             0
         )
     </insert>
+
+    <update id="updateRoom">
+        UPDATE room
+        SET poi_id = #{poiId},
+            room_name = #{roomName},
+            room_no = #{roomName},
+            sort_no = #{sortNo},
+            updated_by = #{userId},
+            updated_at = CURRENT_TIMESTAMP,
+            version_no = version_no + 1
+        WHERE room_id = #{roomId}
+          AND camp_id = #{campId}
+          AND room_category_id = #{roomCategoryId}
+          AND is_deleted = 0
+    </update>
 </mapper>

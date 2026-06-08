@@ -3,14 +3,18 @@ package com.jeez.zp.order.service.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jeez.zp.order.dto.request.OrderCreateRequest;
+import com.jeez.zp.order.dto.request.OrderCreateRoomItemRequest;
 import com.jeez.zp.order.dto.request.OrderGuestSaveItemRequest;
 import com.jeez.zp.order.dto.request.OrderGuestsSaveRequest;
 import com.jeez.zp.order.exception.BusinessException;
 import com.jeez.zp.order.mapper.OrderActionMapper;
 import com.jeez.zp.order.mapper.UserCampMapper;
 import com.jeez.zp.order.service.OrderActionService;
+import com.jeez.zp.order.service.OrderSensitiveDataCipher;
 import com.jeez.zp.order.vo.OrderActionResponseVO;
 import com.jeez.zp.order.vo.OrderActionRowVO;
+import com.jeez.zp.order.vo.OrderChangeRoomOptionVO;
+import com.jeez.zp.order.vo.OrderChangeRoomOptionsResponseVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +23,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +39,7 @@ public class OrderActionServiceImpl implements OrderActionService {
 
     private final OrderActionMapper orderActionMapper;
     private final UserCampMapper userCampMapper;
+    private final OrderSensitiveDataCipher sensitiveDataCipher;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -53,6 +60,8 @@ public class OrderActionServiceImpl implements OrderActionService {
         }
 
         String orderType = normalizeOrderType(request.getOrderType(), request.getStayType());
+        validateRoomSelection(campId, poiId, roomCategoryId, roomId, startAt, endAt, orderId, orderType);
+        List<OrderCreateRoomItemRequest> normalizedRooms = normalizeRoomSnapshots(request.getRooms(), roomCategoryId, roomId);
         String sourceLabel = defaultString(request.getSourceLabel(), "自来客");
 
         orderActionMapper.insertOrderMain(
@@ -103,7 +112,7 @@ public class OrderActionServiceImpl implements OrderActionService {
                 parseOptionalDate(request.getNextPaymentDate()),
                 defaultLong(request.getNextPaymentAmount()),
                 defaultLong(request.getExtraFee()),
-                toJson(request.getRooms()),
+                toJson(normalizedRooms),
                 toJson(request.getTags()),
                 toJson(request.getReminders()),
                 toJson(request.getExtraFeeItems()),
@@ -123,8 +132,38 @@ public class OrderActionServiceImpl implements OrderActionService {
         if (STATUS_COMPLETED.equals(row.getStatus())) {
             throw new BusinessException(40001, "completed order cannot be cancelled");
         }
-        updateStatus(resolvedCampId, orderId, STATUS_CANCELLED, "cancelled", reason, userId);
+        updateStatus(resolvedCampId, orderId, STATUS_CANCELLED, "cancelled", reason, null, null, userId);
         return response(orderId, STATUS_CANCELLED, null, "订单取消成功");
+    }
+
+    @Override
+    @Transactional
+    public OrderActionResponseVO skipStock(Long campId, Long orderId, Long userId, String reason) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        OrderActionRowVO row = requireOrder(resolvedCampId, orderId);
+        if (!STATUS_BOOKED.equals(row.getStatus()) && !STATUS_CHECKED_IN.equals(row.getStatus())) {
+            throw new BusinessException(40001, "只有预订中或入住中的订单可以设置不占库存");
+        }
+
+        String roomSnapshotJson = buildReleasedRoomSnapshotJson(row);
+        String remark = appendSkipStockRemark(row.getRemark(), reason);
+        int updated = orderActionMapper.releaseOrderInventoryAndArrangement(
+                resolvedCampId,
+                orderId,
+                roomSnapshotJson,
+                remark,
+                userId
+        );
+        if (updated != 1) {
+            throw new BusinessException(40401, "订单不存在");
+        }
+
+        OrderActionResponseVO response = response(orderId, row.getStatus(), null, "订单已释放库存并取消排房");
+        response.setRoomId("");
+        response.setRoomName("");
+        response.setRoomCategoryId(stringValue(row.getRoomCategoryId()));
+        response.setRoomCategoryName(row.getRoomCategoryName());
+        return response;
     }
 
     @Override
@@ -135,7 +174,7 @@ public class OrderActionServiceImpl implements OrderActionService {
         if (!STATUS_BOOKED.equals(row.getStatus())) {
             throw new BusinessException(40001, "only booked order can check in");
         }
-        updateStatus(resolvedCampId, orderId, STATUS_CHECKED_IN, null, null, userId);
+        updateStatus(resolvedCampId, orderId, STATUS_CHECKED_IN, null, null, null, null, userId);
         return response(orderId, STATUS_CHECKED_IN, null, "办理入住成功");
     }
 
@@ -147,7 +186,8 @@ public class OrderActionServiceImpl implements OrderActionService {
         if (!STATUS_CHECKED_IN.equals(row.getStatus())) {
             throw new BusinessException(40001, "only checked-in order can check out");
         }
-        updateStatus(resolvedCampId, orderId, STATUS_COMPLETED, "paid", null, userId);
+        LocalDateTime checkedOutAt = LocalDateTime.now();
+        updateStatus(resolvedCampId, orderId, STATUS_COMPLETED, "paid", null, null, checkedOutAt, userId);
         return response(orderId, STATUS_COMPLETED, null, "办理退房成功");
     }
 
@@ -158,7 +198,98 @@ public class OrderActionServiceImpl implements OrderActionService {
         requireOrder(resolvedCampId, orderId);
         List<OrderGuestSaveItemRequest> guests = request == null ? List.of() : request.getGuests();
         replaceGuests(orderId, guests);
+        LocalDateTime guestRegisteredAt = LocalDateTime.now();
+        int updated = orderActionMapper.updateGuestRegisteredAt(resolvedCampId, orderId, guestRegisteredAt, userId);
+        if (updated != 1) {
+            throw new BusinessException(40401, "订单不存在");
+        }
         return response(orderId, null, guests == null ? 0 : guests.size(), "入住人保存成功");
+    }
+
+    @Override
+    @Transactional
+    public OrderChangeRoomOptionsResponseVO getChangeRoomOptions(Long campId, Long orderId, Long userId) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        OrderActionRowVO row = requireOrder(resolvedCampId, orderId);
+        validateChangeRoomSourceOrder(row);
+
+        LocalDate blockStartDate = row.getStartAt().toLocalDate();
+        LocalDate blockEndDate = resolveBlockEndDate(row.getOrderType(), row.getEndAt());
+        List<OrderChangeRoomOptionVO> rooms = orderActionMapper.selectChangeRoomOptions(
+                resolvedCampId,
+                row.getPoiId(),
+                row.getRoomCategoryId(),
+                row.getRoomId(),
+                row.getStartAt(),
+                row.getEndAt(),
+                blockStartDate,
+                blockEndDate,
+                orderId
+        );
+
+        OrderChangeRoomOptionsResponseVO response = new OrderChangeRoomOptionsResponseVO();
+        response.setOrderId(String.valueOf(orderId));
+        response.setRoomId(stringValue(row.getRoomId()));
+        response.setRoomName(row.getRoomName());
+        response.setRoomCategoryId(stringValue(row.getRoomCategoryId()));
+        response.setRoomCategoryName(row.getRoomCategoryName());
+        response.setRooms(rooms);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public OrderActionResponseVO changeRoom(Long campId, Long orderId, Long targetRoomId, Long userId, String reason) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        OrderActionRowVO row = requireOrder(resolvedCampId, orderId);
+        validateChangeRoomSourceOrder(row);
+        if (targetRoomId == null) {
+            throw new BusinessException(40001, "目标房间不能为空");
+        }
+        if (targetRoomId.equals(row.getRoomId())) {
+            throw new BusinessException(40001, "目标房间不能与当前房间相同");
+        }
+
+        OrderChangeRoomOptionVO targetRoom = orderActionMapper.selectRoomForChangeRoom(
+                resolvedCampId,
+                row.getPoiId(),
+                row.getRoomCategoryId(),
+                targetRoomId
+        );
+        if (targetRoom == null) {
+            throw new BusinessException(40001, "目标房间不属于当前房型或不可用");
+        }
+
+        LocalDate blockStartDate = row.getStartAt().toLocalDate();
+        LocalDate blockEndDate = resolveBlockEndDate(row.getOrderType(), row.getEndAt());
+        if (orderActionMapper.countOverlappingClosedRoomBlocks(resolvedCampId, targetRoomId, blockStartDate, blockEndDate) > 0) {
+            throw new BusinessException(40001, "目标房间在该时间段已关房，不能换房");
+        }
+        if (orderActionMapper.countOverlappingActiveOrders(resolvedCampId, targetRoomId, row.getStartAt(), row.getEndAt(), orderId) > 0) {
+            throw new BusinessException(40001, "目标房间在该时间段已被占用");
+        }
+
+        String roomSnapshotJson = buildChangedRoomSnapshotJson(row, targetRoom);
+        String remark = appendChangeRoomRemark(row.getRemark(), reason);
+        int updated = orderActionMapper.updateOrderRoom(
+                resolvedCampId,
+                orderId,
+                targetRoomId,
+                targetRoom.getRoomName(),
+                roomSnapshotJson,
+                remark,
+                userId
+        );
+        if (updated != 1) {
+            throw new BusinessException(40401, "订单不存在");
+        }
+
+        OrderActionResponseVO response = response(orderId, row.getStatus(), null, "换房成功");
+        response.setRoomId(targetRoom.getRoomId());
+        response.setRoomName(targetRoom.getRoomName());
+        response.setRoomCategoryId(targetRoom.getRoomCategoryId());
+        response.setRoomCategoryName(targetRoom.getRoomCategoryName());
+        return response;
     }
 
     private void replaceGuests(Long orderId, List<OrderGuestSaveItemRequest> guests) {
@@ -177,8 +308,8 @@ public class OrderActionServiceImpl implements OrderActionService {
                     orderId,
                     requireText(guest.getGuestName(), "guestName"),
                     guest.getGuestMobile(),
-                    guest.getGuestIdCardType(),
-                    guest.getGuestIdCard(),
+                    defaultString(guest.getGuestIdCardType(), "居民身份证"),
+                    sensitiveDataCipher.encryptIdCard(trimToNull(guest.getGuestIdCard())),
                     defaultString(guest.getGuestType(), "adult")
             );
         }
@@ -195,20 +326,205 @@ public class OrderActionServiceImpl implements OrderActionService {
         return row;
     }
 
-    private void updateStatus(Long campId, Long orderId, String status, String paymentStatus, String remark, Long userId) {
-        int updated = orderActionMapper.updateOrderStatus(campId, orderId, status, paymentStatus, remark, userId);
+    private void validateChangeRoomSourceOrder(OrderActionRowVO row) {
+        if (!STATUS_BOOKED.equals(row.getStatus()) && !STATUS_CHECKED_IN.equals(row.getStatus())) {
+            throw new BusinessException(40001, "只有预订中或入住中的订单可以换房");
+        }
+        if (row.getPoiId() == null || row.getRoomCategoryId() == null || row.getRoomId() == null) {
+            throw new BusinessException(40001, "订单缺少当前房间信息，不能换房");
+        }
+        if (row.getStartAt() == null || row.getEndAt() == null || !row.getEndAt().isAfter(row.getStartAt())) {
+            throw new BusinessException(40001, "订单入住时间不完整，不能换房");
+        }
+    }
+
+    private String buildChangedRoomSnapshotJson(OrderActionRowVO row, OrderChangeRoomOptionVO targetRoom) {
+        List<Map<String, Object>> snapshots = readRoomSnapshots(row.getRoomSnapshotJson());
+        if (snapshots.isEmpty()) {
+            snapshots.add(new LinkedHashMap<>());
+        }
+        Map<String, Object> firstSnapshot = snapshots.get(0);
+        firstSnapshot.put("roomCategoryId", targetRoom.getRoomCategoryId());
+        firstSnapshot.put("roomType", targetRoom.getRoomCategoryName());
+        firstSnapshot.put("roomCategoryName", targetRoom.getRoomCategoryName());
+        firstSnapshot.put("roomId", targetRoom.getRoomId());
+        firstSnapshot.put("roomName", targetRoom.getRoomName());
+        return toJson(snapshots);
+    }
+
+    private String buildReleasedRoomSnapshotJson(OrderActionRowVO row) {
+        List<Map<String, Object>> snapshots = readRoomSnapshots(row.getRoomSnapshotJson());
+        if (snapshots.isEmpty()) {
+            Map<String, Object> snapshot = new LinkedHashMap<>();
+            snapshot.put("roomCategoryId", stringValue(row.getRoomCategoryId()));
+            snapshot.put("roomType", row.getRoomCategoryName());
+            snapshot.put("roomCategoryName", row.getRoomCategoryName());
+            snapshots.add(snapshot);
+            return toJson(snapshots);
+        }
+        for (Map<String, Object> snapshot : snapshots) {
+            snapshot.remove("roomId");
+            snapshot.remove("roomInfoId");
+            snapshot.remove("roomName");
+            snapshot.remove("roomNo");
+            snapshot.remove("roomLabel");
+        }
+        return toJson(snapshots);
+    }
+
+    private List<Map<String, Object>> readRoomSnapshots(String snapshotJson) {
+        if (snapshotJson == null || snapshotJson.isBlank()) {
+            return new java.util.ArrayList<>();
+        }
+        try {
+            return objectMapper.readValue(
+                    snapshotJson,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class)
+            );
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException(40001, "订单房间快照格式错误，不能换房");
+        }
+    }
+
+    private String appendChangeRoomRemark(String remark, String reason) {
+        String normalizedReason = trimToNull(reason);
+        if (normalizedReason == null) {
+            return remark;
+        }
+        String changeRoomRemark = "换房原因：" + normalizedReason;
+        String existingRemark = trimToNull(remark);
+        if (existingRemark == null) {
+            return changeRoomRemark;
+        }
+        return existingRemark + "\n" + changeRoomRemark;
+    }
+
+    private String appendSkipStockRemark(String remark, String reason) {
+        String normalizedReason = trimToNull(reason);
+        if (normalizedReason == null) {
+            return remark;
+        }
+        String skipStockRemark = "不占库存原因：" + normalizedReason;
+        String existingRemark = trimToNull(remark);
+        if (existingRemark == null) {
+            return skipStockRemark;
+        }
+        return existingRemark + "\n" + skipStockRemark;
+    }
+
+    private void updateStatus(
+            Long campId,
+            Long orderId,
+            String status,
+            String paymentStatus,
+            String remark,
+            LocalDateTime guestRegisteredAt,
+            LocalDateTime checkedOutAt,
+            Long userId
+    ) {
+        int updated = orderActionMapper.updateOrderStatus(
+                campId, orderId, status, paymentStatus, remark, guestRegisteredAt, checkedOutAt, userId
+        );
         if (updated != 1) {
             throw new BusinessException(40401, "订单不存在");
         }
     }
 
     private OrderActionResponseVO response(Long orderId, String status, Integer guestCount, String message) {
+        return response(orderId, status, guestCount, null, null, message);
+    }
+
+    private OrderActionResponseVO response(
+            Long orderId,
+            String status,
+            Integer guestCount,
+            LocalDateTime guestRegisteredAt,
+            LocalDateTime checkedOutAt,
+            String message
+    ) {
+        OrderActionRowVO orderTimes = orderActionMapper.selectOrderTimes(orderId);
+        LocalDateTime resolvedGuestRegisteredAt = guestRegisteredAt != null
+                ? guestRegisteredAt
+                : orderTimes == null ? null : orderTimes.getGuestRegisteredAt();
+        LocalDateTime resolvedCheckedOutAt = checkedOutAt != null
+                ? checkedOutAt
+                : orderTimes == null ? null : orderTimes.getCheckedOutAt();
         OrderActionResponseVO response = new OrderActionResponseVO();
         response.setOrderId(String.valueOf(orderId));
         response.setStatus(status);
         response.setGuestCount(guestCount);
+        response.setGuestRegisteredAt(formatDateTime(resolvedGuestRegisteredAt));
+        response.setCheckedOutAt(formatDateTime(resolvedCheckedOutAt));
         response.setMessage(message);
         return response;
+    }
+
+    private String formatDateTime(LocalDateTime value) {
+        return value == null ? null : DATE_TIME_FORMATTER.format(value);
+    }
+
+    private void validateRoomSelection(
+            Long campId,
+            Long poiId,
+            Long roomCategoryId,
+            Long roomId,
+            LocalDateTime startAt,
+            LocalDateTime endAt,
+            Long orderId,
+            String orderType
+    ) {
+        if (!requiresRoomSelection(orderType)) {
+            return;
+        }
+        if (poiId == null || roomCategoryId == null || roomId == null) {
+            throw new BusinessException(40001, "请选择可用房间后创建订单");
+        }
+        if (orderActionMapper.countActiveRoomBySelection(campId, poiId, roomCategoryId, roomId) != 1) {
+            throw new BusinessException(40001, "所选房间不属于当前门店或房型");
+        }
+        LocalDate blockStartDate = startAt.toLocalDate();
+        LocalDate blockEndDate = resolveBlockEndDate(orderType, endAt);
+        if (orderActionMapper.countOverlappingClosedRoomBlocks(campId, roomId, blockStartDate, blockEndDate) > 0) {
+            throw new BusinessException(40001, "所选房间在该时间段已关房，不能录单");
+        }
+        if (orderActionMapper.countOverlappingActiveOrders(campId, roomId, startAt, endAt, orderId) > 0) {
+            throw new BusinessException(40001, "所选房间在该时间段已被占用");
+        }
+    }
+
+    private LocalDate resolveBlockEndDate(String orderType, LocalDateTime endAt) {
+        if ("hourly_room".equals(orderType)) {
+            return endAt.minusNanos(1).toLocalDate();
+        }
+        return endAt.toLocalDate().minusDays(1);
+    }
+
+    private boolean requiresRoomSelection(String orderType) {
+        return "daily_room".equals(orderType) || "hourly_room".equals(orderType) || "long_rental".equals(orderType);
+    }
+
+    private List<OrderCreateRoomItemRequest> normalizeRoomSnapshots(
+            List<OrderCreateRoomItemRequest> rooms,
+            Long roomCategoryId,
+            Long roomId
+    ) {
+        if (rooms == null || rooms.isEmpty()) {
+            return rooms;
+        }
+        String roomCategoryIdText = roomCategoryId == null ? null : String.valueOf(roomCategoryId);
+        String roomIdText = roomId == null ? null : String.valueOf(roomId);
+        for (OrderCreateRoomItemRequest room : rooms) {
+            if (room == null) {
+                continue;
+            }
+            if (trimToNull(room.getRoomCategoryId()) == null) {
+                room.setRoomCategoryId(roomCategoryIdText);
+            }
+            if (trimToNull(room.getRoomId()) == null) {
+                room.setRoomId(roomIdText);
+            }
+        }
+        return rooms;
     }
 
     private Long resolveAccessibleCampId(Long requestedCampId, Long userId) {
@@ -274,6 +590,10 @@ public class OrderActionServiceImpl implements OrderActionService {
 
     private long defaultLong(Long value) {
         return value == null ? 0L : value;
+    }
+
+    private String stringValue(Long value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private String defaultString(String value, String fallback) {

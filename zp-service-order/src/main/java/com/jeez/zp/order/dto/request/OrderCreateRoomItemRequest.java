@@ -5,6 +5,7 @@ import lombok.Data;
 @Data
 public class OrderCreateRoomItemRequest {
 
+    private String roomCategoryId;
     private String roomId;
     private String roomType;
     private String roomName;

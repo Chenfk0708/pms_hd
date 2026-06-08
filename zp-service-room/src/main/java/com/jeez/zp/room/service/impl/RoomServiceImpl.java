@@ -16,6 +16,9 @@ import com.jeez.zp.room.vo.RoomStatusesRoomsRoomVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
@@ -142,6 +145,8 @@ public class RoomServiceImpl implements RoomService {
             List<Long> roomCategoryIds,
             List<Long> poiIds,
             Long storeId,
+            String startDate,
+            Integer days,
             String queryCode,
             Integer page,
             Integer pageNum,
@@ -155,6 +160,7 @@ public class RoomServiceImpl implements RoomService {
             normalizedPoiIds = List.of(storeId);
         }
         String normalizedKeyword = trimToNull(queryCode);
+        DateRange requestedRange = resolveRequestedRange(startDate, days);
         int resolvedPage = normalizePage(page, pageNum, current);
         int resolvedPageSize = normalizePageSize(pageSize);
         long offset = (long) (resolvedPage - 1) * resolvedPageSize;
@@ -163,7 +169,9 @@ public class RoomServiceImpl implements RoomService {
                 resolvedCampId,
                 normalizedRoomCategoryIds,
                 normalizedPoiIds,
-                normalizedKeyword
+                normalizedKeyword,
+                requestedRange.startAt(),
+                requestedRange.endAt()
         );
 
         List<RoomStatusesRoomsCategoryVO> categories = total == 0
@@ -173,11 +181,13 @@ public class RoomServiceImpl implements RoomService {
                 normalizedRoomCategoryIds,
                 normalizedPoiIds,
                 normalizedKeyword,
+                requestedRange.startAt(),
+                requestedRange.endAt(),
                 offset,
                 resolvedPageSize
         );
 
-        hydrateRoomStatusesRooms(categories, resolvedCampId, normalizedPoiIds, normalizedKeyword);
+        hydrateRoomStatusesRooms(categories, resolvedCampId, normalizedPoiIds, normalizedKeyword, requestedRange);
 
         RoomStatusesRoomsResponseVO response = new RoomStatusesRoomsResponseVO();
         response.setIsSingleInventory(SINGLE_INVENTORY_DISABLED);
@@ -190,7 +200,8 @@ public class RoomServiceImpl implements RoomService {
             List<RoomStatusesRoomsCategoryVO> categories,
             Long campId,
             List<Long> poiIds,
-            String keyword
+            String keyword,
+            DateRange requestedRange
     ) {
         if (categories.isEmpty()) {
             return;
@@ -205,7 +216,9 @@ public class RoomServiceImpl implements RoomService {
                         campId,
                         roomCategoryIds,
                         poiIds,
-                        keyword
+                        keyword,
+                        requestedRange.startAt(),
+                        requestedRange.endAt()
                 ).stream()
                 .collect(Collectors.groupingBy(
                         RoomStatusesRoomsRoomVO::getRoomCategoryId,
@@ -263,6 +276,24 @@ public class RoomServiceImpl implements RoomService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private DateRange resolveRequestedRange(String startDate, Integer days) {
+        String normalizedStartDate = trimToNull(startDate);
+        if (normalizedStartDate == null) {
+            return new DateRange(null, null);
+        }
+
+        try {
+            LocalDate rangeStart = LocalDate.parse(normalizedStartDate);
+            int rangeDays = days == null || days < 1 ? 1 : days;
+            return new DateRange(rangeStart.atStartOfDay(), rangeStart.plusDays(rangeDays).atStartOfDay());
+        } catch (DateTimeParseException exception) {
+            throw new BusinessException(40001, "startDate格式错误");
+        }
+    }
+
+    private record DateRange(LocalDateTime startAt, LocalDateTime endAt) {
     }
 
     private Long parseLongOrNull(String value) {

@@ -16,6 +16,12 @@ public class GlobalExceptionHandler {
                 .body(HudsonResponse.failure(ex.getCode(), ex.getMessage(), TraceIdFactory.next("business-error")));
     }
 
+    @ExceptionHandler(com.jeez.zp.finance.exception.BusinessException.class)
+    public ResponseEntity<HudsonResponse<Void>> handleFinanceBusinessException(com.jeez.zp.finance.exception.BusinessException ex) {
+        return ResponseEntity.status(resolveHttpStatus(ex.getCode()))
+                .body(HudsonResponse.failure(ex.getCode(), ex.getMessage(), TraceIdFactory.next("business-error")));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<HudsonResponse<Void>> handleUnexpectedException(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

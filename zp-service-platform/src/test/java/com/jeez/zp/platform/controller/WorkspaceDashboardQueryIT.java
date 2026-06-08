@@ -121,6 +121,40 @@ class WorkspaceDashboardQueryIT {
 
     @Test
     @Timeout(60)
+    void reportHomePageV2_shouldCountOverdueBookedOrderAsPredictedArrivalWhileItStillOccupiesRoom() throws Exception {
+        cleanupWorkspaceScene();
+        insertCamp();
+        rebindCurrentUserCamp();
+        insertPoi();
+        insertRoomCategory();
+        insertRoom(ROOM_ID_1, "A-101", "normal", "clean", 1);
+
+        LocalDate today = LocalDate.now(SHANGHAI_ZONE);
+        LocalDate yesterday = today.minusDays(1);
+
+        insertOrderMain(19653L, null, ROOM_ID_1, "booked", "paid",
+                "Overdue booked guest", "13900000503", yesterday, today, yesterday.atTime(8, 0),
+                26000, 26000, 0, 0, 26000, "frontdesk", "overdue booked arrival");
+
+        mockMvc.perform(post("/report/homePage/v2")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"19101"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.nowPredictCheckIn").value(1))
+                .andExpect(jsonPath("$.data.nowAlreadyCheckIn").value(0))
+                .andExpect(jsonPath("$.data.nowOnSaleNum").value(0));
+    }
+
+    @Test
+    @Timeout(60)
     void reportHomePageV2_shouldFallbackInvalidCampIdAndRejectForeignCamp() throws Exception {
         seedWorkspaceScene();
 
@@ -282,6 +316,45 @@ class WorkspaceDashboardQueryIT {
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.list.length()").value(1))
                 .andExpect(jsonPath("$.data.list[0].roomName").value("A-103"));
+    }
+
+    @Test
+    @Timeout(60)
+    void ordersGet_shouldShowOverdueBookedOrderInArrivalsTabWhileItStillOccupiesRoom() throws Exception {
+        cleanupWorkspaceScene();
+        insertCamp();
+        rebindCurrentUserCamp();
+        insertPoi();
+        insertRoomCategory();
+        insertRoom(ROOM_ID_1, "A-101", "normal", "clean", 1);
+
+        LocalDate today = LocalDate.now(SHANGHAI_ZONE);
+        LocalDate yesterday = today.minusDays(1);
+
+        insertOrderMain(19654L, null, ROOM_ID_1, "booked", "paid",
+                "Platform Overdue Arrival", "13900000504", yesterday, today, yesterday.atTime(8, 0),
+                26000, 26000, 0, 0, 26000, "frontdesk", "platform overdue booked arrival");
+
+        mockMvc.perform(post("/orders/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"19101",
+                                  "orderType":"11",
+                                  "pageNum":1,
+                                  "pageSize":10,
+                                  "keyword":"Overdue"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.list.length()").value(1))
+                .andExpect(jsonPath("$.data.list[0].guestName").value("Platform Overdue Arrival"))
+                .andExpect(jsonPath("$.data.list[0].roomName").value("A-101"));
     }
 
     @Test

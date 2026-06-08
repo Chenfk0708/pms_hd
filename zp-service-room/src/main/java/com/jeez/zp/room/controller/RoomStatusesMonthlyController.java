@@ -2,9 +2,11 @@ package com.jeez.zp.room.controller;
 
 import com.jeez.zp.room.api.HudsonResponse;
 import com.jeez.zp.room.api.TraceIdFactory;
+import com.jeez.zp.room.dto.request.RoomStatusCloseRequest;
 import com.jeez.zp.room.dto.request.RoomStatusesMonthlyRequest;
 import com.jeez.zp.room.security.LoginUserContext;
 import com.jeez.zp.room.service.RoomStatusesMonthlyService;
+import com.jeez.zp.room.vo.RoomStatusCloseResponseVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyBlockVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyDailyMonitorVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyInventoryVO;
@@ -24,6 +26,22 @@ import java.util.List;
 public class RoomStatusesMonthlyController {
 
     private final RoomStatusesMonthlyService roomStatusesMonthlyService;
+
+    @PostMapping("/roomStatuses/close/save")
+    public HudsonResponse<RoomStatusCloseResponseVO> closeRoom(@RequestBody RoomStatusCloseRequest request) {
+        return HudsonResponse.success(
+                roomStatusesMonthlyService.closeRoom(request, LoginUserContext.requiredUserId()),
+                TraceIdFactory.next("room-statuses-close-save")
+        );
+    }
+
+    @PostMapping("/roomStatuses/open/save")
+    public HudsonResponse<RoomStatusCloseResponseVO> openRoom(@RequestBody RoomStatusCloseRequest request) {
+        return HudsonResponse.success(
+                roomStatusesMonthlyService.openRoom(request, LoginUserContext.requiredUserId()),
+                TraceIdFactory.next("room-statuses-open-save")
+        );
+    }
 
     @PostMapping("/roomStatuses/inv/get")
     public HudsonResponse<RoomStatusesMonthlyListResponseVO<RoomStatusesMonthlyInventoryVO>> getInventory(

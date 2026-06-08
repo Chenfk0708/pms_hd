@@ -9,20 +9,33 @@ final class OrderTestCatalogFixture {
     static final long STANDARD_ROOM_CATEGORY_ID = 22001L;
     static final long DELUXE_ROOM_CATEGORY_ID = 22002L;
     static final long STANDARD_ROOM_ID = 23001L;
+    static final long STANDARD_CHANGE_ROOM_ID = 23002L;
+    static final long STANDARD_OCCUPIED_ROOM_ID = 23003L;
+    static final long DELUXE_ROOM_ID = 23004L;
     static final String STANDARD_ROOM_CATEGORY_NAME = "标准大床房";
     static final String DELUXE_ROOM_CATEGORY_NAME = "豪华双床房";
     static final String STANDARD_ROOM_NAME = "TDD-ORDER-101";
+    static final String STANDARD_CHANGE_ROOM_NAME = "TDD-ORDER-102";
+    static final String STANDARD_OCCUPIED_ROOM_NAME = "TDD-ORDER-103";
+    static final String DELUXE_ROOM_NAME = "TDD-ORDER-201";
 
     private OrderTestCatalogFixture() {
     }
 
     static void ensureBaseCatalog(JdbcTemplate jdbcTemplate) {
-        upsertRoomCategory(jdbcTemplate, STANDARD_ROOM_CATEGORY_ID, STANDARD_ROOM_CATEGORY_NAME, 10);
+        upsertRoomCategory(jdbcTemplate, STANDARD_ROOM_CATEGORY_ID, STANDARD_ROOM_CATEGORY_NAME, 10, 3);
         upsertRoomCategory(jdbcTemplate, DELUXE_ROOM_CATEGORY_ID, DELUXE_ROOM_CATEGORY_NAME, 20);
         upsertRoom(jdbcTemplate, STANDARD_ROOM_ID, STANDARD_ROOM_CATEGORY_ID, STANDARD_ROOM_NAME, 10);
+        upsertRoom(jdbcTemplate, STANDARD_CHANGE_ROOM_ID, STANDARD_ROOM_CATEGORY_ID, STANDARD_CHANGE_ROOM_NAME, 20);
+        upsertRoom(jdbcTemplate, STANDARD_OCCUPIED_ROOM_ID, STANDARD_ROOM_CATEGORY_ID, STANDARD_OCCUPIED_ROOM_NAME, 30);
+        upsertRoom(jdbcTemplate, DELUXE_ROOM_ID, DELUXE_ROOM_CATEGORY_ID, DELUXE_ROOM_NAME, 40);
     }
 
     private static void upsertRoomCategory(JdbcTemplate jdbcTemplate, long roomCategoryId, String name, int sortNo) {
+        upsertRoomCategory(jdbcTemplate, roomCategoryId, name, sortNo, 1);
+    }
+
+    private static void upsertRoomCategory(JdbcTemplate jdbcTemplate, long roomCategoryId, String name, int sortNo, int roomCount) {
         jdbcTemplate.update("""
                         INSERT INTO room_category (
                             room_category_id,
@@ -50,7 +63,7 @@ final class OrderTestCatalogFixture {
                 POI_ID,
                 name,
                 name,
-                1,
+                roomCount,
                 1,
                 sortNo,
                 0

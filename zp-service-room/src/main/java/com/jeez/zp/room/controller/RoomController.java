@@ -65,6 +65,8 @@ public class RoomController {
                         parseLongList(request.getRoomCategoryIds()),
                         parseLongList(request.getPoiIds()),
                         parseLong(request.getStoreId()),
+                        request.getStartDate(),
+                        request.getDays(),
                         request.getQueryCode(),
                         request.getPage(),
                         request.getPageNum(),

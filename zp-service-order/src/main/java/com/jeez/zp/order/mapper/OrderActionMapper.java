@@ -1,10 +1,12 @@
 package com.jeez.zp.order.mapper;
 
 import com.jeez.zp.order.vo.OrderActionRowVO;
+import com.jeez.zp.order.vo.OrderChangeRoomOptionVO;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface OrderActionMapper {
 
@@ -65,7 +67,68 @@ public interface OrderActionMapper {
             @Param("userId") Long userId
     );
 
+    int countActiveRoomBySelection(
+            @Param("campId") Long campId,
+            @Param("poiId") Long poiId,
+            @Param("roomCategoryId") Long roomCategoryId,
+            @Param("roomId") Long roomId
+    );
+
+    int countOverlappingActiveOrders(
+            @Param("campId") Long campId,
+            @Param("roomId") Long roomId,
+            @Param("startAt") LocalDateTime startAt,
+            @Param("endAt") LocalDateTime endAt,
+            @Param("excludeOrderId") Long excludeOrderId
+    );
+
+    int countOverlappingClosedRoomBlocks(
+            @Param("campId") Long campId,
+            @Param("roomId") Long roomId,
+            @Param("blockStartDate") LocalDate blockStartDate,
+            @Param("blockEndDate") LocalDate blockEndDate
+    );
+
     OrderActionRowVO selectOrderForUpdate(@Param("campId") Long campId, @Param("orderId") Long orderId);
+
+    List<OrderChangeRoomOptionVO> selectChangeRoomOptions(
+            @Param("campId") Long campId,
+            @Param("poiId") Long poiId,
+            @Param("roomCategoryId") Long roomCategoryId,
+            @Param("currentRoomId") Long currentRoomId,
+            @Param("startAt") LocalDateTime startAt,
+            @Param("endAt") LocalDateTime endAt,
+            @Param("blockStartDate") LocalDate blockStartDate,
+            @Param("blockEndDate") LocalDate blockEndDate,
+            @Param("excludeOrderId") Long excludeOrderId
+    );
+
+    OrderChangeRoomOptionVO selectRoomForChangeRoom(
+            @Param("campId") Long campId,
+            @Param("poiId") Long poiId,
+            @Param("roomCategoryId") Long roomCategoryId,
+            @Param("roomId") Long roomId
+    );
+
+    OrderActionRowVO selectOrderTimes(@Param("orderId") Long orderId);
+
+    int updateOrderRoom(
+            @Param("campId") Long campId,
+            @Param("orderId") Long orderId,
+            @Param("roomId") Long roomId,
+            @Param("roomNameSnapshot") String roomNameSnapshot,
+            @Param("roomSnapshotJson") String roomSnapshotJson,
+            @Param("remark") String remark,
+            @Param("userId") Long userId
+    );
+
+    int releaseOrderInventoryAndArrangement(
+            @Param("campId") Long campId,
+            @Param("orderId") Long orderId,
+            @Param("roomSnapshotJson") String roomSnapshotJson,
+            @Param("remark") String remark,
+            @Param("userId") Long userId
+    );
 
     int updateOrderStatus(
             @Param("campId") Long campId,
@@ -73,6 +136,15 @@ public interface OrderActionMapper {
             @Param("status") String status,
             @Param("paymentStatus") String paymentStatus,
             @Param("remark") String remark,
+            @Param("guestRegisteredAt") LocalDateTime guestRegisteredAt,
+            @Param("checkedOutAt") LocalDateTime checkedOutAt,
+            @Param("userId") Long userId
+    );
+
+    int updateGuestRegisteredAt(
+            @Param("campId") Long campId,
+            @Param("orderId") Long orderId,
+            @Param("guestRegisteredAt") LocalDateTime guestRegisteredAt,
             @Param("userId") Long userId
     );
 

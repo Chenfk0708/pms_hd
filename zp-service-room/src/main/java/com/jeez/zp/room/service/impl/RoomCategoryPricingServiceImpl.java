@@ -58,7 +58,8 @@ public class RoomCategoryPricingServiceImpl implements RoomCategoryPricingServic
         List<RoomCategoryPricingRowVO> rows = roomCategoryPricingMapper.selectRows(
                 resolvedCampId,
                 parseLongList(roomCategoryIds),
-                parseLongList(channelIds)
+                parseLongList(channelIds),
+                null
         );
 
         RoomCategoryPricingTableResponseVO response = new RoomCategoryPricingTableResponseVO();
@@ -80,7 +81,8 @@ public class RoomCategoryPricingServiceImpl implements RoomCategoryPricingServic
         List<RoomCategoryPricingRowVO> rows = roomCategoryPricingMapper.selectRows(
                 resolvedCampId,
                 parseLongList(roomCategoryIds),
-                parseLongList(channelIds)
+                parseLongList(channelIds),
+                null
         );
 
         RoomCategoryPricingTableResponseVO response = new RoomCategoryPricingTableResponseVO();

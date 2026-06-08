@@ -21,6 +21,7 @@ import com.jeez.zp.platform.vo.RoomCategoryPageItemVO;
 import com.jeez.zp.platform.vo.RoomCategoryPageResponseVO;
 import com.jeez.zp.platform.vo.RoomCategoryPhotoVO;
 import com.jeez.zp.platform.vo.RoomCategoryProductInfoVO;
+import com.jeez.zp.platform.vo.RoomCategoryRoomRowVO;
 import com.jeez.zp.platform.vo.RoomCategoryRoomViewVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -156,11 +157,12 @@ public class RoomCategoryServiceImpl implements RoomCategoryService {
 
         CurrentUserBundleVO bundle = platformBootstrapMapper.selectCurrentUserBundle(userId);
         List<RoomCategoryPhotoVO> photos = createMode ? List.of() : roomCategoryMapper.selectPhotos(resolvedCampId, roomCategoryId);
+        List<RoomCategoryRoomRowVO> rooms = createMode ? List.of() : roomCategoryMapper.selectActiveRoomsByCategory(resolvedCampId, roomCategoryId);
         RoomCategoryEditDraftVO draft = new RoomCategoryEditDraftVO();
         draft.setMode(createMode ? "create" : "detail");
         draft.setTitle(createMode ? "新增房型" : "房型详情");
         draft.setSteps(EDIT_STEPS);
-        draft.setForm(buildEditForm(row, bundle, photos));
+        draft.setForm(buildEditForm(row, bundle, rooms, photos));
         return draft;
     }
 
@@ -348,7 +350,7 @@ public class RoomCategoryServiceImpl implements RoomCategoryService {
             throw new BusinessException(40404, "房型不存在");
         }
 
-        replaceRooms(resolvedCampId, poiId, roomCategoryId, userId, roomNos);
+        replaceRooms(resolvedCampId, poiId, roomCategoryId, userId, parseRoomIds(form.getRoomIds()), roomNos);
         if (form.getPhotos() != null) {
             replacePhotos(resolvedCampId, roomCategoryId, form.getPhotos());
         }
@@ -363,6 +365,9 @@ public class RoomCategoryServiceImpl implements RoomCategoryService {
         }
 
         Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        if (roomCategoryMapper.countCurrentOrFutureOrdersByCategory(resolvedCampId, roomCategoryId) > 0) {
+            throw new BusinessException(40001, "当前或未来已有订单，不能删除房型");
+        }
         roomCategoryMapper.disableLinkages(resolvedCampId, roomCategoryId);
         roomCategoryMapper.deleteCleanTasksByCategory(resolvedCampId, roomCategoryId);
         roomCategoryMapper.deleteRoomsByCategory(resolvedCampId, roomCategoryId, userId);
@@ -450,13 +455,21 @@ public class RoomCategoryServiceImpl implements RoomCategoryService {
         return productInfo;
     }
 
-    private RoomCategoryEditFormVO buildEditForm(RoomCategoryPageItemVO row, CurrentUserBundleVO bundle, List<RoomCategoryPhotoVO> photos) {
+    private RoomCategoryEditFormVO buildEditForm(RoomCategoryPageItemVO row, CurrentUserBundleVO bundle, List<RoomCategoryRoomRowVO> rooms, List<RoomCategoryPhotoVO> photos) {
         RoomCategoryEditFormVO form = new RoomCategoryEditFormVO();
         form.setRoomTypeId(row == null ? "" : defaultString(row.getRoomCategoryId()));
         form.setRoomTypeName(row == null ? "" : defaultString(row.getRoomCategoryName()));
         form.setStoreId(row == null ? defaultString(bundle == null || bundle.getPoiId() == null ? null : String.valueOf(bundle.getPoiId())) : defaultString(row.getPoiId()));
         form.setGroupId(row == null ? "" : defaultString(row.getRoomCategoryGroupId()));
-        List<String> roomNos = splitRoomNames(row == null ? "" : row.getRoomNames());
+        List<RoomCategoryRoomRowVO> activeRooms = rooms == null ? List.of() : rooms;
+        List<String> roomNos = activeRooms.isEmpty()
+                ? splitRoomNames(row == null ? "" : row.getRoomNames())
+                : activeRooms.stream().map(RoomCategoryRoomRowVO::getRoomName).toList();
+        form.setRoomIds(activeRooms.stream()
+                .map(RoomCategoryRoomRowVO::getRoomId)
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .toList());
         form.setRoomNos(roomNos.isEmpty() ? List.of("房间1") : roomNos);
         form.setRoomCount(row == null ? "1" : String.valueOf(row.getRoomNum() == null ? form.getRoomNos().size() : row.getRoomNum()));
         form.setWeekdayPrice(toYuanText(row == null ? null : row.getBasePrice()));
@@ -525,11 +538,66 @@ public class RoomCategoryServiceImpl implements RoomCategoryService {
         }
     }
 
-    private void replaceRooms(Long campId, Long poiId, Long roomCategoryId, Long userId, List<String> roomNos) {
-        roomCategoryMapper.deleteRoomsByCategory(campId, roomCategoryId, userId);
+    private void replaceRooms(Long campId, Long poiId, Long roomCategoryId, Long userId, List<Long> roomIds, List<String> roomNos) {
+        List<RoomCategoryRoomRowVO> existingRooms = roomCategoryMapper.selectActiveRoomsByCategory(campId, roomCategoryId);
+        Map<Long, RoomCategoryRoomRowVO> existingRoomsById = existingRooms.stream()
+                .filter(room -> room.getRoomId() != null)
+                .collect(Collectors.toMap(
+                        RoomCategoryRoomRowVO::getRoomId,
+                        room -> room,
+                        (first, ignored) -> first,
+                        LinkedHashMap::new
+                ));
+        List<Long> requestedRoomIds = roomIds == null ? List.of() : roomIds;
+        Set<Long> retainedRoomIds = new LinkedHashSet<>();
+        boolean useExplicitRoomIds = !requestedRoomIds.isEmpty();
+
         for (int index = 0; index < roomNos.size(); index++) {
+            Long requestedRoomId = index < requestedRoomIds.size() ? requestedRoomIds.get(index) : null;
+            if (requestedRoomId != null) {
+                if (!existingRoomsById.containsKey(requestedRoomId)) {
+                    throw new BusinessException(40001, "房间数据已变更，请刷新后重试");
+                }
+                if (!retainedRoomIds.add(requestedRoomId)) {
+                    throw new BusinessException(40001, "房间数据重复，请刷新后重试");
+                }
+                roomCategoryMapper.updateRoom(requestedRoomId, campId, poiId, roomCategoryId, roomNos.get(index), index + 1, userId);
+                continue;
+            }
+
+            if (!useExplicitRoomIds && index < existingRooms.size()) {
+                Long existingRoomId = existingRooms.get(index).getRoomId();
+                if (existingRoomId == null) {
+                    throw new BusinessException(40001, "房间数据已变更，请刷新后重试");
+                }
+                retainedRoomIds.add(existingRoomId);
+                roomCategoryMapper.updateRoom(existingRoomId, campId, poiId, roomCategoryId, roomNos.get(index), index + 1, userId);
+                continue;
+            }
+
             roomCategoryMapper.insertRoom(IdWorker.getId(), campId, poiId, roomCategoryId, roomNos.get(index), index + 1, userId);
         }
+
+        List<Long> deletedRoomIds = existingRooms.stream()
+                .map(RoomCategoryRoomRowVO::getRoomId)
+                .filter(Objects::nonNull)
+                .filter(roomId -> !retainedRoomIds.contains(roomId))
+                .toList();
+        if (!deletedRoomIds.isEmpty()) {
+            if (roomCategoryMapper.countCurrentOrFutureOrdersByRooms(campId, deletedRoomIds) > 0) {
+                throw new BusinessException(40001, "被删除的房间当前或未来已有订单，不能保存房型");
+            }
+            roomCategoryMapper.deleteRoomsByIds(campId, deletedRoomIds, userId);
+        }
+    }
+
+    private List<Long> parseRoomIds(List<String> roomIds) {
+        if (roomIds == null || roomIds.isEmpty()) {
+            return List.of();
+        }
+        return roomIds.stream()
+                .map(this::parseLong)
+                .toList();
     }
 
     private void replacePhotos(Long campId, Long roomCategoryId, List<RoomCategorySaveRequest.Photo> photos) {

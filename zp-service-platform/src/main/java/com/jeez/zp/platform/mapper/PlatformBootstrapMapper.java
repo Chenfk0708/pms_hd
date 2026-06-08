@@ -19,7 +19,7 @@ public interface PlatformBootstrapMapper {
 
     List<String> selectAuthorityCodesByRoleId(@Param("roleId") Long roleId);
 
-    CampDetailVO selectCampDetail(@Param("campId") Long campId);
+    CampDetailVO selectCampDetail(@Param("campId") Long campId, @Param("poiId") Long poiId);
 
     List<SystemConfigItemVO> selectSystemConfigs(@Param("campId") Long campId, @Param("userId") Long userId);
 

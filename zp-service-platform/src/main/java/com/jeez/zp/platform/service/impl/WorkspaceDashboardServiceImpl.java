@@ -66,7 +66,7 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
         List<WorkspaceDashboardOrderRowVO> orderRows = workspaceDashboardMapper.selectOrderRows(resolvedCampId, dayStart, nextDayStart);
 
         WorkspaceHomePageVO response = new WorkspaceHomePageVO();
-        response.setNowPredictCheckIn(countOrders(lifecycleOrderRows, row -> isBooked(row) && isSameDate(row.getStartAt(), today)));
+        response.setNowPredictCheckIn(countOrders(lifecycleOrderRows, row -> isBooked(row) && overlapsDate(row.getStartAt(), row.getEndAt(), today)));
         response.setNowAlreadyCheckIn(countOrders(lifecycleOrderRows, this::isCheckedIn));
         response.setNowPredictCheckOut(countOrders(lifecycleOrderRows, row -> isCheckedIn(row) && isSameDate(row.getEndAt(), today)));
         response.setNowOnSaleNum(count(roomRows, this::isOnSale));
@@ -398,7 +398,7 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
             return true;
         }
         return switch (normalized) {
-            case "11" -> isBooked(row) && isSameDate(row.getStartAt(), today);
+            case "11" -> isBooked(row) && overlapsDate(row.getStartAt(), row.getEndAt(), today);
             case "12" -> isStaying(row, today);
             case "13" -> isCheckingOut(row, today);
             default -> false;
@@ -434,6 +434,13 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
 
     private boolean isSameDate(LocalDateTime value, LocalDate targetDate) {
         return value != null && value.toLocalDate().isEqual(targetDate);
+    }
+
+    private boolean overlapsDate(LocalDateTime startAt, LocalDateTime endAt, LocalDate targetDate) {
+        return startAt != null
+                && endAt != null
+                && startAt.isBefore(targetDate.plusDays(1).atStartOfDay())
+                && endAt.isAfter(targetDate.atStartOfDay());
     }
 
     private boolean isStaying(WorkspaceOrderListRowVO row, LocalDate today) {
@@ -619,7 +626,7 @@ public class WorkspaceDashboardServiceImpl implements WorkspaceDashboardService 
     }
 
     private String resolveWorkspaceOrderStatusName(WorkspaceOrderListRowVO row, LocalDate today) {
-        if (isBooked(row) && isSameDate(row.getStartAt(), today)) {
+        if (isBooked(row) && overlapsDate(row.getStartAt(), row.getEndAt(), today)) {
             return "待入住";
         }
         if (isCheckingOut(row, today)) {

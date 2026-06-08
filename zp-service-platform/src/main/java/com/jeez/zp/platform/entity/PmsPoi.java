@@ -19,6 +19,17 @@ public class PmsPoi {
     private Integer sortNo;
     private String address;
     private String contactNumber;
+    private String cityName;
+    private String cityPath;
+    private String streetAddress;
+    private String communityName;
+    private String unitNo;
+    private String fullAddress;
+    private String tagsJson;
+    private String plainIntro;
+    private String richIntro;
+    private String coverImageDataUrl;
+    private Integer photoCount;
     private Integer status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

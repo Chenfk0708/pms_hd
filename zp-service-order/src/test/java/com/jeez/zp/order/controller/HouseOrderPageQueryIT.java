@@ -75,7 +75,7 @@ class HouseOrderPageQueryIT {
                 .andExpect(jsonPath("$.data.list[0].orderChannelName").value("Direct OTA"))
                 .andExpect(jsonPath("$.data.list[0].guestName").value("House Page Alpha"))
                 .andExpect(jsonPath("$.data.list[0].guestMobile").value("13939101001"))
-                .andExpect(jsonPath("$.data.list[0].orderState").value(1))
+                .andExpect(jsonPath("$.data.list[0].orderState").value(2))
                 .andExpect(jsonPath("$.data.list[0].refundDisplayState").value(0))
                 .andExpect(jsonPath("$.data.list[0].totalRoomPrice").value(26800))
                 .andExpect(jsonPath("$.data.list[0].totalPayPrice").value(26800))
@@ -118,6 +118,84 @@ class HouseOrderPageQueryIT {
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.list[0].orderId").value("39101"))
                 .andExpect(jsonPath("$.data.list[0].guestName").value("House Page Alpha"));
+    }
+
+    @Test
+    @Timeout(60)
+    void ordersHousePageGet_shouldReturnTargetStatusCodesForCheckedInAndCompletedOrders() throws Exception {
+        seedOrders();
+        LocalDate today = LocalDate.now(SHANGHAI_ZONE);
+        LocalDate tomorrow = today.plusDays(1);
+        insertOrderMain(
+                39103L,
+                "checked_in",
+                "paid",
+                "House Page Checked In",
+                "13939103003",
+                today.minusDays(1),
+                tomorrow,
+                today.atTime(11, 0),
+                53600,
+                53600,
+                0,
+                "checked-in order"
+        );
+        insertOrderMain(
+                39104L,
+                "completed",
+                "paid",
+                "House Page Completed",
+                "13939104004",
+                today.minusDays(2),
+                today.minusDays(1),
+                today.atTime(12, 0),
+                26800,
+                26800,
+                0,
+                "completed order"
+        );
+
+        mockMvc.perform(post("/orders/house/page/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "pageNum":1,
+                                  "pageSize":20,
+                                  "orderType":"",
+                                  "isLt":0,
+                                  "searchContent":"House Page Checked In"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.list[0].orderId").value("39103"))
+                .andExpect(jsonPath("$.data.list[0].orderState").value(3))
+                .andExpect(jsonPath("$.data.list[0].orderDetailViews[0].orderDetailDisplayState").value(2));
+
+        mockMvc.perform(post("/orders/house/page/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "pageNum":1,
+                                  "pageSize":20,
+                                  "orderType":"",
+                                  "isLt":0,
+                                  "searchContent":"House Page Completed"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.list[0].orderId").value("39104"))
+                .andExpect(jsonPath("$.data.list[0].orderState").value(4))
+                .andExpect(jsonPath("$.data.list[0].orderDetailViews[0].orderDetailDisplayState").value(3));
     }
 
     @Test

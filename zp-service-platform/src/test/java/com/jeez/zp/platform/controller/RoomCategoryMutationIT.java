@@ -11,6 +11,11 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -149,6 +154,112 @@ class RoomCategoryMutationIT {
                 FROM room
                 WHERE room_category_id = ? AND is_deleted = 0
                 """, Integer.class, ROOM_CATEGORY_A)).isEqualTo(2);
+    }
+
+    @Test
+    @Timeout(60)
+    void roomCategorySave_shouldKeepExistingRoomIdsWhenEditingRoomNos() throws Exception {
+        insertRoomCategory(ROOM_CATEGORY_A, "TDD keep room ids", 1, 10);
+        insertRoom(92921L, ROOM_CATEGORY_A, "KEEP-101", 1);
+
+        mockMvc.perform(post("/roomCategory/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "form":{
+                                    "roomTypeId":"92901",
+                                    "roomTypeName":"TDD keep room ids updated",
+                                    "storeId":"11001",
+                                    "groupId":"21001",
+                                    "roomCount":"2",
+                                    "roomNos":["KEEP-201","KEEP-202"],
+                                    "weekdayPrice":"268",
+                                    "weekendPrice":"288",
+                                    "holidayPrice":"308",
+                                    "rentalType":"entire",
+                                    "propertyType":"apartment",
+                                    "guestCount":"2",
+                                    "displayName":"TDD keep room ids updated",
+                                    "earliestCheckIn":"14",
+                                    "latestCheckIn":"23",
+                                    "latestCheckOut":"12"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT is_deleted
+                FROM room
+                WHERE room_id = ?
+                """, Integer.class, 92921L)).isEqualTo(0);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT room_name
+                FROM room
+                WHERE room_id = ?
+                """, String.class, 92921L)).isEqualTo("KEEP-201");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT sort_no
+                FROM room
+                WHERE room_id = ?
+                """, Integer.class, 92921L)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM room
+                WHERE room_category_id = ? AND is_deleted = 0
+                """, Integer.class, ROOM_CATEGORY_A)).isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM room
+                WHERE room_category_id = ? AND is_deleted = 0 AND room_name = 'KEEP-202'
+                """, Integer.class, ROOM_CATEGORY_A)).isEqualTo(1);
+    }
+
+    @Test
+    @Timeout(60)
+    void roomCategorySave_shouldRejectWhenRemovedRoomHasCurrentOrFutureOrders() throws Exception {
+        insertRoomCategory(ROOM_CATEGORY_A, "TDD reject remove ordered room", 2, 10);
+        insertRoom(92984L, ROOM_CATEGORY_A, "ORDER-KEEP-101", 1);
+        insertRoom(92985L, ROOM_CATEGORY_A, "ORDER-REMOVE-102", 2);
+        insertOrderMain(92995L, ROOM_CATEGORY_A, 92985L, "booked", LocalDate.now().plusDays(1));
+
+        mockMvc.perform(post("/roomCategory/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "form":{
+                                    "roomTypeId":"92901",
+                                    "roomTypeName":"TDD reject remove ordered room",
+                                    "storeId":"11001",
+                                    "groupId":"21001",
+                                    "roomCount":"1",
+                                    "roomNos":["ORDER-KEEP-101"],
+                                    "weekdayPrice":"268",
+                                    "weekendPrice":"288",
+                                    "holidayPrice":"308",
+                                    "rentalType":"entire",
+                                    "propertyType":"apartment",
+                                    "guestCount":"2",
+                                    "displayName":"TDD reject remove ordered room",
+                                    "earliestCheckIn":"14",
+                                    "latestCheckIn":"23",
+                                    "latestCheckOut":"12"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40001))
+                .andExpect(jsonPath("$.errorMsg").value("被删除的房间当前或未来已有订单，不能保存房型"));
+
+        assertRoomCategoryAndRoomRemainActive(ROOM_CATEGORY_A, 92984L);
+        assertRoomCategoryAndRoomRemainActive(ROOM_CATEGORY_A, 92985L);
     }
 
     @Test
@@ -403,6 +514,88 @@ class RoomCategoryMutationIT {
 
     @Test
     @Timeout(60)
+    void roomCategoryDelete_shouldRejectWhenRoomCategoryHasCurrentOrFutureOrders() throws Exception {
+        insertRoomCategory(ROOM_CATEGORY_A, "TDD delete active order", 1, 10);
+        insertRoom(92981L, ROOM_CATEGORY_A, "PROTECT-ORDER-101", 1);
+        insertOrderMain(92991L, ROOM_CATEGORY_A, 92981L, "booked", LocalDate.now().plusDays(1));
+
+        mockMvc.perform(post("/roomCategory/delete")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campId":"10001","roomCategoryId":"92901"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40001))
+                .andExpect(jsonPath("$.errorMsg").value("当前或未来已有订单，不能删除房型"));
+
+        assertRoomCategoryAndRoomRemainActive(ROOM_CATEGORY_A, 92981L);
+    }
+
+    @Test
+    @Timeout(60)
+    void roomCategoryDelete_shouldAllowWhenRoomCategoryOnlyHasPastOrders() throws Exception {
+        insertRoomCategory(ROOM_CATEGORY_A, "TDD delete historical order", 1, 10);
+        insertRoom(92982L, ROOM_CATEGORY_A, "PAST-ORDER-101", 1);
+        insertOrderMain(92992L, ROOM_CATEGORY_A, 92982L, "booked", LocalDate.now().minusDays(3));
+
+        mockMvc.perform(post("/roomCategory/delete")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campId":"10001","roomCategoryId":"92901"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.message").value("房型已删除"));
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT is_deleted
+                FROM room_category
+                WHERE room_category_id = ?
+                """, Integer.class, ROOM_CATEGORY_A)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT is_deleted
+                FROM room
+                WHERE room_id = ?
+                """, Integer.class, 92982L)).isEqualTo(1);
+    }
+
+    @Test
+    @Timeout(60)
+    void roomCategoryDelete_shouldAllowWhenRoomCategoryOnlyHasActiveChannelMapping() throws Exception {
+        insertRoomCategory(ROOM_CATEGORY_A, "TDD delete channel mapping", 1, 10);
+        insertRoom(92983L, ROOM_CATEGORY_A, "CHANNEL-ONLY-101", 1);
+        insertChannelAccount(92993L);
+        insertChannelRoomCategoryRel(92994L, 92993L, ROOM_CATEGORY_A);
+
+        mockMvc.perform(post("/roomCategory/delete")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campId":"10001","roomCategoryId":"92901"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.message").value("房型已删除"));
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT is_deleted
+                FROM room_category
+                WHERE room_category_id = ?
+                """, Integer.class, ROOM_CATEGORY_A)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT is_deleted
+                FROM room
+                WHERE room_id = ?
+                """, Integer.class, 92983L)).isEqualTo(1);
+    }
+
+    @Test
+    @Timeout(60)
     void roomCategoryDelete_shouldAvoidUniqueConflictWhenSameRoomNameWasPreviouslySoftDeleted() throws Exception {
         insertRoomCategory(ROOM_CATEGORY_B, "TDD deleted same room name B", 1, 20);
         insertRoom(92961L, ROOM_CATEGORY_B, "DUP-101", 1);
@@ -550,5 +743,148 @@ class RoomCategoryMutationIT {
                 "checkout",
                 "pending"
         );
+    }
+
+    private void insertOrderMain(long orderId, long roomCategoryId, long roomId, String status) {
+        insertOrderMain(orderId, roomCategoryId, roomId, status, LocalDate.of(2026, 6, 3));
+    }
+
+    private void insertOrderMain(long orderId, long roomCategoryId, long roomId, String status, LocalDate startDate) {
+        LocalDate endDate = startDate.plusDays(1);
+        LocalDateTime createdAt = startDate.atTime(10, 0);
+        jdbcTemplate.update("""
+                        INSERT INTO order_main (
+                            order_id,
+                            camp_id,
+                            poi_id,
+                            room_category_id,
+                            room_id,
+                            channel_id,
+                            goods_id,
+                            order_no,
+                            out_order_no,
+                            order_type,
+                            status,
+                            guest_name,
+                            guest_mobile,
+                            start_at,
+                            end_at,
+                            day_num,
+                            total_price_cent,
+                            discount_price_cent,
+                            total_pay_price_cent,
+                            refund_price_cent,
+                            commission_price_cent,
+                            payment_fee_cent,
+                            platform_service_fee_cent,
+                            distribution_commission_cent,
+                            settlement_amount_cent,
+                            payment_status,
+                            payment_type_id,
+                            payment_way_id,
+                            source_type,
+                            remark,
+                            created_at,
+                            updated_at,
+                            created_by,
+                            updated_by,
+                            is_deleted,
+                            version_no
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+                        """,
+                orderId,
+                CAMP_ID,
+                POI_ID,
+                roomCategoryId,
+                roomId,
+                null,
+                null,
+                "ORDER-" + orderId,
+                "OUT-ORDER-" + orderId,
+                "daily_room",
+                status,
+                "Delete Protect Guest",
+                "13900009291",
+                Timestamp.valueOf(startDate.atTime(LocalTime.of(14, 0))),
+                Timestamp.valueOf(endDate.atTime(LocalTime.of(12, 0))),
+                1,
+                26800L,
+                0L,
+                26800L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                26800L,
+                "paid",
+                null,
+                null,
+                "frontdesk",
+                "room-category-delete-protect",
+                Timestamp.valueOf(createdAt),
+                Timestamp.valueOf(createdAt.plusMinutes(5)),
+                USER_ID,
+                USER_ID
+        );
+    }
+
+    private void insertChannelAccount(long accountId) {
+        jdbcTemplate.update("""
+                        INSERT INTO channel_account (
+                            account_id,
+                            camp_id,
+                            channel_id,
+                            channel_name,
+                            account_name,
+                            out_account_id,
+                            status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                accountId,
+                CAMP_ID,
+                17L,
+                "localhome",
+                "delete-protect-account",
+                "OUT-" + accountId,
+                "authorized"
+        );
+    }
+
+    private void insertChannelRoomCategoryRel(long id, long accountId, long roomCategoryId) {
+        jdbcTemplate.update("""
+                        INSERT INTO channel_room_category_rel (
+                            id,
+                            camp_id,
+                            account_id,
+                            room_category_id,
+                            out_room_category_id,
+                            project_type,
+                            shelf_status,
+                            audit_status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                id,
+                CAMP_ID,
+                accountId,
+                roomCategoryId,
+                "OUT-RC-" + roomCategoryId,
+                "calendar_room",
+                "on_shelf",
+                "approved"
+        );
+    }
+
+    private void assertRoomCategoryAndRoomRemainActive(long roomCategoryId, long roomId) {
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT is_deleted
+                FROM room_category
+                WHERE room_category_id = ?
+                """, Integer.class, roomCategoryId)).isEqualTo(0);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT is_deleted
+                FROM room
+                WHERE room_id = ?
+                """, Integer.class, roomId)).isEqualTo(0);
     }
 }

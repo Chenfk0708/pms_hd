@@ -4,6 +4,7 @@ import com.jeez.zp.order.exception.BusinessException;
 import com.jeez.zp.order.mapper.OrderQueryMapper;
 import com.jeez.zp.order.mapper.UserCampMapper;
 import com.jeez.zp.order.service.OrderQueryService;
+import com.jeez.zp.order.service.OrderSensitiveDataCipher;
 import com.jeez.zp.order.vo.OrderDetailViewVO;
 import com.jeez.zp.order.vo.LongRentalOrderPageItemVO;
 import com.jeez.zp.order.vo.OrderDetailAggregateVO;
@@ -43,6 +44,7 @@ public class OrderQueryServiceImpl implements OrderQueryService {
 
     private final OrderQueryMapper orderQueryMapper;
     private final UserCampMapper userCampMapper;
+    private final OrderSensitiveDataCipher sensitiveDataCipher;
 
     @Override
     public OrderPageResponseVO getHousePage(
@@ -203,7 +205,9 @@ public class OrderQueryServiceImpl implements OrderQueryService {
         detail.setPaymentWayName(row.getPaymentWayName());
         detail.setRemark(row.getRemark());
         detail.setCreatedAt(formatDateTime(row.getCreatedAt()));
-        detail.setGuests(orderQueryMapper.selectOrderGuests(orderId));
+        detail.setGuests(orderQueryMapper.selectOrderGuests(orderId).stream()
+                .map(this::decryptGuestIdCard)
+                .toList());
         detail.setPaymentRecords(orderQueryMapper.selectOrderPaymentRecords(resolvedCampId, orderId).stream()
                 .map(this::toPaymentRecord)
                 .toList());
@@ -267,7 +271,7 @@ public class OrderQueryServiceImpl implements OrderQueryService {
             return true;
         }
         return switch (normalized) {
-            case "11" -> isBooked(row) && isSameDate(row.getStartAt(), today);
+            case "11" -> isBooked(row) && overlapsDate(row.getStartAt(), row.getEndAt(), today);
             case "12" -> isStaying(row, today);
             case "13" -> isCheckingOut(row, today);
             default -> false;
@@ -327,6 +331,13 @@ public class OrderQueryServiceImpl implements OrderQueryService {
 
     private boolean isSameDate(LocalDateTime value, LocalDate targetDate) {
         return value != null && value.toLocalDate().isEqual(targetDate);
+    }
+
+    private boolean overlapsDate(LocalDateTime startAt, LocalDateTime endAt, LocalDate targetDate) {
+        return startAt != null
+                && endAt != null
+                && startAt.isBefore(targetDate.plusDays(1).atStartOfDay())
+                && endAt.isAfter(targetDate.atStartOfDay());
     }
 
     private boolean isStaying(WorkspaceOrderListRowVO row, LocalDate today) {
@@ -405,7 +416,7 @@ public class OrderQueryServiceImpl implements OrderQueryService {
     }
 
     private String resolveWorkspaceOrderStatusName(WorkspaceOrderListRowVO row, LocalDate today) {
-        if (isBooked(row) && isSameDate(row.getStartAt(), today)) {
+        if (isBooked(row) && overlapsDate(row.getStartAt(), row.getEndAt(), today)) {
             return "待入住";
         }
         if (isCheckingOut(row, today)) {
@@ -496,6 +507,11 @@ public class OrderQueryServiceImpl implements OrderQueryService {
         return item;
     }
 
+    private OrderGuestVO decryptGuestIdCard(OrderGuestVO guest) {
+        guest.setGuestIdCard(sensitiveDataCipher.decryptIdCard(guest.getGuestIdCard()));
+        return guest;
+    }
+
     private String resolveDetailStatusName(OrderDetailRowVO row) {
         String status = trimToNull(row.getStatus());
         if ("booked".equalsIgnoreCase(status) || "pending".equalsIgnoreCase(status)) {
@@ -572,29 +588,32 @@ public class OrderQueryServiceImpl implements OrderQueryService {
             return 0;
         }
         if (hasStatus(row, "booked")) {
-            return 1;
+            return 2;
         }
         if (hasStatus(row, "checked_in")) {
-            return 2;
+            return 3;
         }
         if (hasStatus(row, "completed")) {
             return 4;
         }
-        if (hasStatus(row, "cancelled") || hasStatus(row, "refunded")) {
-            return 3;
+        if (hasStatus(row, "cancelled")) {
+            return 5;
         }
-        return 1;
+        if (hasStatus(row, "refunded")) {
+            return 9;
+        }
+        return 2;
     }
 
     private Integer resolveDetailDisplayState(OrderQueryRowVO row) {
         if (hasStatus(row, "checked_in")) {
-            return 4;
-        }
-        if (hasStatus(row, "completed")) {
             return 2;
         }
-        if (hasStatus(row, "cancelled") || hasStatus(row, "refunded")) {
+        if (hasStatus(row, "completed")) {
             return 3;
+        }
+        if (hasStatus(row, "cancelled") || hasStatus(row, "refunded")) {
+            return 4;
         }
         return 1;
     }

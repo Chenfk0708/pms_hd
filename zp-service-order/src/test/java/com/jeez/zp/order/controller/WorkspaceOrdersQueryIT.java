@@ -165,6 +165,48 @@ class WorkspaceOrdersQueryIT {
                 .andExpect(jsonPath("$.data.list[0].orderDetailDisplayStateName").value("待退房"));
     }
 
+
+    @Test
+    @Timeout(60)
+    void ordersGet_shouldShowOverdueBookedOrderInArrivalsTabWhileItStillOccupiesRoom() throws Exception {
+        resetOrders();
+        OrderTestCatalogFixture.ensureBaseCatalog(jdbcTemplate);
+        insertChannelAccount();
+
+        LocalDate today = LocalDate.now(SHANGHAI_ZONE);
+        LocalDate yesterday = today.minusDays(1);
+
+        insertOrderMain(
+                39304L,
+                "booked",
+                "Workspace Overdue Arrival",
+                "13939304004",
+                yesterday,
+                today,
+                yesterday.atTime(8, 0)
+        );
+
+        mockMvc.perform(post("/orders/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "orderType":"11",
+                                  "pageNum":1,
+                                  "pageSize":10,
+                                  "keyword":"Overdue"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.list.length()").value(1))
+                .andExpect(jsonPath("$.data.list[0].guestName").value("Workspace Overdue Arrival"))
+                .andExpect(jsonPath("$.data.list[0].roomName").value(OrderTestCatalogFixture.STANDARD_ROOM_NAME));
+    }
+
     @Test
     @Timeout(60)
     void ordersGet_shouldFallbackCurrentCampAndRejectForeignCampAccess() throws Exception {
@@ -245,11 +287,11 @@ class WorkspaceOrdersQueryIT {
     }
 
     private void resetOrders() {
-        jdbcTemplate.update("DELETE FROM order_payment_record WHERE camp_id = ? AND order_id BETWEEN 39301 AND 39303", CAMP_ID);
-        jdbcTemplate.update("DELETE FROM distribution_order WHERE camp_id = ? AND source_order_id BETWEEN 39301 AND 39303", CAMP_ID);
-        jdbcTemplate.update("DELETE FROM order_guest WHERE order_id BETWEEN 39301 AND 39303");
-        jdbcTemplate.update("DELETE FROM ledger_entry WHERE camp_id = ? AND order_id BETWEEN 39301 AND 39303", CAMP_ID);
-        jdbcTemplate.update("DELETE FROM order_main WHERE camp_id = ? AND order_id BETWEEN 39301 AND 39303", CAMP_ID);
+        jdbcTemplate.update("DELETE FROM order_payment_record WHERE camp_id = ? AND order_id BETWEEN 39301 AND 39304", CAMP_ID);
+        jdbcTemplate.update("DELETE FROM distribution_order WHERE camp_id = ? AND source_order_id BETWEEN 39301 AND 39304", CAMP_ID);
+        jdbcTemplate.update("DELETE FROM order_guest WHERE order_id BETWEEN 39301 AND 39304");
+        jdbcTemplate.update("DELETE FROM ledger_entry WHERE camp_id = ? AND order_id BETWEEN 39301 AND 39304", CAMP_ID);
+        jdbcTemplate.update("DELETE FROM order_main WHERE camp_id = ? AND order_id BETWEEN 39301 AND 39304", CAMP_ID);
         jdbcTemplate.update("DELETE FROM channel_account WHERE account_id = ?", CHANNEL_ACCOUNT_ID);
     }
 

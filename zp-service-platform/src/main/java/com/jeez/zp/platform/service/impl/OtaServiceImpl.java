@@ -112,14 +112,17 @@ public class OtaServiceImpl implements OtaService {
     @Override
     public OtaChannelDetailVO getChannelDetail(OtaChannelDetailRequest request, Long userId) {
         Long campId = resolveAccessibleCampId(parseNullableLong(request.getCampId()), userId);
+        Long requestedAccountId = parseNullableLong(request.getAccountId());
         String requestedChannelId = normalizeChannelKey(request.getChannelId());
         Long channelId = channelKeyToId(requestedChannelId);
-        if (channelId == null) {
+        if (channelId == null && requestedAccountId == null) {
             throw new BusinessException(40404, "OTA渠道不存在");
         }
 
         List<OtaAccountQueryRowVO> channelAccounts = otaMapper.selectAccounts(campId, null).stream()
-                .filter(row -> channelId.equals(row.getChannelId()))
+                .filter(row -> requestedAccountId == null
+                        ? channelId.equals(row.getChannelId())
+                        : requestedAccountId.equals(row.getAccountIdRaw()))
                 .toList();
         if (channelAccounts.isEmpty()) {
             throw new BusinessException(40404, "OTA渠道不存在");

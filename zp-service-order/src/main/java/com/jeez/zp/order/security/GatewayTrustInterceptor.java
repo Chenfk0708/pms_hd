@@ -22,7 +22,9 @@ public class GatewayTrustInterceptor implements HandlerInterceptor {
         }
 
         try {
-            LoginUserContext.setCurrentUserId(Long.valueOf(userId));
+            Long parsedUserId = Long.valueOf(userId);
+            LoginUserContext.setCurrentUserId(parsedUserId);
+            com.jeez.zp.finance.security.LoginUserContext.setCurrentUserId(parsedUserId);
         } catch (NumberFormatException ex) {
             throw new BusinessException(401, UNAUTHORIZED_MESSAGE);
         }
@@ -32,5 +34,6 @@ public class GatewayTrustInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         LoginUserContext.clear();
+        com.jeez.zp.finance.security.LoginUserContext.clear();
     }
 }

@@ -19,7 +19,6 @@
         <module>zp-service-room</module>
         <module>zp-service-order</module>
         <module>zp-service-crm</module>
-        <module>zp-service-finance</module>
     </modules>
 
     <properties>

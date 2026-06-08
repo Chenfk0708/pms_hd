@@ -37,4 +37,20 @@
             om.created_at DESC,
             om.order_id DESC
     </select>
+
+    <update id="markStrongReminderAction">
+        UPDATE order_main
+        SET remark = CONCAT(
+                COALESCE(remark, ''),
+                CASE WHEN COALESCE(remark, '') = '' THEN '' ELSE '\n' END,
+                '[AI_GLOBAL_REMINDER:',
+                #{action},
+                ']'
+            ),
+            updated_by = #{userId},
+            updated_at = NOW()
+        WHERE camp_id = #{campId}
+          AND order_id = #{orderId}
+          AND is_deleted = 0
+    </update>
 </mapper>

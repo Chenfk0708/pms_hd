@@ -32,7 +32,6 @@ class GatewayRouteOwnershipTest {
         assertRouteBefore(routes, "room-service", "platform-service");
         assertRouteBefore(routes, "order-service", "platform-service");
         assertRouteBefore(routes, "crm-service", "platform-service");
-        assertRouteBefore(routes, "finance-service", "platform-service");
     }
 
     @Test
@@ -214,6 +213,9 @@ class GatewayRouteOwnershipTest {
                 () -> "platform-service route must own profit report export endpoint, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/statistics/profit-report/export/download"),
                 () -> "platform-service route must own profit report export download endpoint, actual Path predicate: " + pathPatterns);
+
+        assertTrue(pathPatterns.contains("/globalRadar/**"),
+                () -> "platform-service route must own AI global radar action endpoints, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/campFlow/get"),
                 () -> "platform-service route must own workspace traffic endpoint, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/memo/page/get"),
@@ -279,17 +281,17 @@ class GatewayRouteOwnershipTest {
                 () -> "platform-service route must own OTA endpoints through ota wildcard, actual Path predicate: "
                         + platformPathPatterns);
 
-        RouteDefinition financeRoute = findRoute(routes, "finance-service");
-        assertNotNull(financeRoute, "Missing gateway route: finance-service");
-        String financePathPatterns = financeRoute.getPredicates().get(0).getArgs().values().stream()
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String orderPathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
                 .map(String::valueOf)
                 .collect(Collectors.joining(","));
-        assertFalse(financePathPatterns.contains("/ota/dashboard/get"),
-                () -> "finance-service route must not shadow platform OTA dashboard endpoint, actual Path predicate: "
-                        + financePathPatterns);
-        assertFalse(financePathPatterns.contains("/ota/channel/detail/get"),
-                () -> "finance-service route must not shadow platform OTA channel detail endpoint, actual Path predicate: "
-                        + financePathPatterns);
+        assertFalse(orderPathPatterns.contains("/ota/dashboard/get"),
+                () -> "order-service route must not shadow platform OTA dashboard endpoint, actual Path predicate: "
+                        + orderPathPatterns);
+        assertFalse(orderPathPatterns.contains("/ota/channel/detail/get"),
+                () -> "order-service route must not shadow platform OTA channel detail endpoint, actual Path predicate: "
+                        + orderPathPatterns);
     }
 
 
@@ -314,121 +316,121 @@ class GatewayRouteOwnershipTest {
 
     @Test
     @Timeout(60)
-    void financeRouteOwnsShiftWorkPages() {
+    void orderRouteOwnsShiftWorkPages() {
         List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
                 .collectList()
                 .block(Duration.ofSeconds(10));
 
         assertNotNull(routes);
-        RouteDefinition financeRoute = findRoute(routes, "finance-service");
-        assertNotNull(financeRoute, "Missing gateway route: finance-service");
-        String pathPatterns = financeRoute.getPredicates().get(0).getArgs().values().stream()
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String pathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
                 .map(String::valueOf)
                 .collect(Collectors.joining(","));
         assertTrue(pathPatterns.contains("/shiftWorkConfig/page/get"),
-                () -> "finance-service route must own shiftWorkConfig page, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own shiftWorkConfig page, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/shiftWorkConfig/save"),
-                () -> "finance-service route must own shiftWorkConfig save, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own shiftWorkConfig save, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/shiftWorkGoods/page/get"),
-                () -> "finance-service route must own shiftWorkGoods page, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own shiftWorkGoods page, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/shiftWorkGoods/save"),
-                () -> "finance-service route must own shiftWorkGoods save, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own shiftWorkGoods save, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/shiftWorkReport/page/get"),
-                () -> "finance-service route must own shiftWorkReport page, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own shiftWorkReport page, actual Path predicate: " + pathPatterns);
     }
 
     @Test
     @Timeout(60)
-    void financeRouteOwnsPaymentSettingMutations() {
+    void orderRouteOwnsPaymentSettingMutations() {
         List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
                 .collectList()
                 .block(Duration.ofSeconds(10));
 
         assertNotNull(routes);
-        RouteDefinition financeRoute = findRoute(routes, "finance-service");
-        assertNotNull(financeRoute, "Missing gateway route: finance-service");
-        String pathPatterns = financeRoute.getPredicates().get(0).getArgs().values().stream()
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String pathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
                 .map(String::valueOf)
                 .collect(Collectors.joining(","));
         assertTrue(pathPatterns.contains("/paymentSettings/create"),
-                () -> "finance-service route must own paymentSettings create, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own paymentSettings create, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/paymentSettings/status/update"),
-                () -> "finance-service route must own paymentSettings status update, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own paymentSettings status update, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/paymentSettings/default/update"),
-                () -> "finance-service route must own paymentSettings default update, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own paymentSettings default update, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/paymentSettings/sort/update"),
-                () -> "finance-service route must own paymentSettings sort update, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own paymentSettings sort update, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/paymentSettings/export"),
-                () -> "finance-service route must own paymentSettings export, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own paymentSettings export, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/paymentTypes/custom/create"),
-                () -> "finance-service route must own custom payment type create, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own custom payment type create, actual Path predicate: " + pathPatterns);
     }
 
     @Test
     @Timeout(60)
-    void financeRouteOwnsSocialChannelOverview() {
+    void orderRouteOwnsSocialChannelOverview() {
         List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
                 .collectList()
                 .block(Duration.ofSeconds(10));
 
         assertNotNull(routes);
-        RouteDefinition financeRoute = findRoute(routes, "finance-service");
-        assertNotNull(financeRoute, "Missing gateway route: finance-service");
-        String pathPatterns = financeRoute.getPredicates().get(0).getArgs().values().stream()
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String pathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
                 .map(String::valueOf)
                 .collect(Collectors.joining(","));
         assertTrue(pathPatterns.contains("/channels/social/overview"),
-                () -> "finance-service route must own social channel overview, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own social channel overview, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/channels/custom/list"),
-                () -> "finance-service route must own custom channel list, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own custom channel list, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/channels/custom/create"),
-                () -> "finance-service route must own custom channel create, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own custom channel create, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/channels/custom/update"),
-                () -> "finance-service route must own custom channel update, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own custom channel update, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/channels/custom/delete"),
-                () -> "finance-service route must own custom channel delete, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own custom channel delete, actual Path predicate: " + pathPatterns);
     }
 
     @Test
     @Timeout(60)
-    void financeRouteOwnsFullMarketingReports() {
+    void orderRouteOwnsFullMarketingReports() {
         List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
                 .collectList()
                 .block(Duration.ofSeconds(10));
 
         assertNotNull(routes);
-        RouteDefinition financeRoute = findRoute(routes, "finance-service");
-        assertNotNull(financeRoute, "Missing gateway route: finance-service");
-        String pathPatterns = financeRoute.getPredicates().get(0).getArgs().values().stream()
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String pathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
                 .map(String::valueOf)
                 .collect(Collectors.joining(","));
         assertTrue(pathPatterns.contains("/promotionPlanProducts/page/get"),
-                () -> "finance-service route must own full marketing commission products, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own full marketing commission products, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/report/promotion/get"),
-                () -> "finance-service route must own full marketing promotion metrics, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own full marketing promotion metrics, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/report/promotion/productSale/page/get"),
-                () -> "finance-service route must own full marketing product sales, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own full marketing product sales, actual Path predicate: " + pathPatterns);
     }
 
     @Test
     @Timeout(60)
-    void financeRouteOwnsLedgerSummaryAndStatementOrderReports() {
+    void orderRouteOwnsLedgerSummaryAndStatementOrderReports() {
         List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
                 .collectList()
                 .block(Duration.ofSeconds(10));
 
         assertNotNull(routes);
-        RouteDefinition financeRoute = findRoute(routes, "finance-service");
-        assertNotNull(financeRoute, "Missing gateway route: finance-service");
-        String pathPatterns = financeRoute.getPredicates().get(0).getArgs().values().stream()
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String pathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
                 .map(String::valueOf)
                 .collect(Collectors.joining(","));
         assertTrue(pathPatterns.contains("/accountBookPaymentWay/page/get"),
-                () -> "finance-service route must own total ledger summary, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own total ledger summary, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/orderLedger/dashboard/get"),
-                () -> "finance-service route must own ledger entry/order ledger dashboard, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own ledger entry/order ledger dashboard, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/report/storer/statement/get"),
-                () -> "finance-service route must own storer statement order report, actual Path predicate: " + pathPatterns);
+                () -> "order-service route must own storer statement order report, actual Path predicate: " + pathPatterns);
     }
 
     @Test
@@ -448,6 +450,42 @@ class GatewayRouteOwnershipTest {
                 () -> "order-service route must own coupon list page, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/couponSendConfigs/page/get"),
                 () -> "order-service route must own coupon send config page, actual Path predicate: " + pathPatterns);
+    }
+
+    @Test
+    @Timeout(60)
+    void orderRouteOwnsChangeRoomActions() {
+        List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
+                .collectList()
+                .block(Duration.ofSeconds(10));
+
+        assertNotNull(routes);
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String pathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        assertTrue(pathPatterns.contains("/orders/*/change-room/options"),
+                () -> "order-service route must own change-room options, actual Path predicate: " + pathPatterns);
+        assertTrue(pathPatterns.contains("/orders/*/change-room"),
+                () -> "order-service route must own change-room submit, actual Path predicate: " + pathPatterns);
+    }
+
+    @Test
+    @Timeout(60)
+    void orderRouteOwnsSkipStockActions() {
+        List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
+                .collectList()
+                .block(Duration.ofSeconds(10));
+
+        assertNotNull(routes);
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String pathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        assertTrue(pathPatterns.contains("/orders/*/skip-stock"),
+                () -> "order-service route must own skip-stock action, actual Path predicate: " + pathPatterns);
     }
 
     @Test

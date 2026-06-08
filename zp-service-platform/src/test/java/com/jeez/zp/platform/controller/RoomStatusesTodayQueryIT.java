@@ -131,6 +131,35 @@ class RoomStatusesTodayQueryIT {
 
     @Test
     @Timeout(60)
+    void roomStatusesTodayGet_shouldFallbackToSourceLabelSnapshotWhenChannelAccountMissing() throws Exception {
+        seedRoomStatusesTodayScene();
+        insertOrderMain(99624L, null, 99222L, 99424L, "booked", "paid", "SNAPSHOT-GUEST", "13900000007",
+                TARGET_DATE, TARGET_DATE.plusDays(1), TARGET_DATE.minusDays(1).atTime(7, 0), null, "Snapshot OTA");
+
+        mockMvc.perform(post("/roomStatusesToday/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "storeId":"99121",
+                                  "date":"2026-05-18",
+                                  "viewMode":"按房间号",
+                                  "keyword":"SNAPSHOT-GUEST"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.roomViews.length()").value(1))
+                .andExpect(jsonPath("$.data.roomViews[0].roomId").value("99424"))
+                .andExpect(jsonPath("$.data.roomViews[0].guestName").value("SNAPSHOT-GUEST"))
+                .andExpect(jsonPath("$.data.roomViews[0].orders[0].orderId").value("99624"))
+                .andExpect(jsonPath("$.data.roomViews[0].orders[0].channelName").value("Snapshot OTA"));
+    }
+
+    @Test
+    @Timeout(60)
     void roomStatusesTodayGet_shouldFallbackInvalidCampIdForFloorViewAndRejectForeignCamp() throws Exception {
         seedRoomStatusesTodayScene();
 
@@ -343,7 +372,7 @@ class RoomStatusesTodayQueryIT {
 
     private void insertOrderMain(
             long orderId,
-            long channelAccountId,
+            Long channelAccountId,
             long roomCategoryId,
             long roomId,
             String status,
@@ -354,6 +383,25 @@ class RoomStatusesTodayQueryIT {
             LocalDate endDate,
             LocalDateTime createdAt,
             String remark
+    ) {
+        insertOrderMain(orderId, channelAccountId, roomCategoryId, roomId, status, paymentStatus, guestName, guestMobile,
+                startDate, endDate, createdAt, remark, null);
+    }
+
+    private void insertOrderMain(
+            long orderId,
+            Long channelAccountId,
+            long roomCategoryId,
+            long roomId,
+            String status,
+            String paymentStatus,
+            String guestName,
+            String guestMobile,
+            LocalDate startDate,
+            LocalDate endDate,
+            LocalDateTime createdAt,
+            String remark,
+            String sourceLabelSnapshot
     ) {
         jdbcTemplate.update("""
                         INSERT INTO order_main (
@@ -386,6 +434,7 @@ class RoomStatusesTodayQueryIT {
                             payment_type_id,
                             payment_way_id,
                             source_type,
+                            source_label_snapshot,
                             remark,
                             created_at,
                             updated_at,
@@ -393,7 +442,7 @@ class RoomStatusesTodayQueryIT {
                             updated_by,
                             is_deleted,
                             version_no
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
                         """,
                 orderId,
                 CAMP_ID,
@@ -424,6 +473,7 @@ class RoomStatusesTodayQueryIT {
                 17101L,
                 17202L,
                 "channel",
+                sourceLabelSnapshot,
                 remark,
                 Timestamp.valueOf(createdAt),
                 Timestamp.valueOf(createdAt.plusMinutes(30)),

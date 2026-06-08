@@ -4,6 +4,7 @@ import com.jeez.zp.platform.vo.RoomCategoryPageItemVO;
 import com.jeez.zp.platform.vo.RoomCategoryPhotoVO;
 import com.jeez.zp.platform.vo.RoomCategoryDetailChannelPriceRowVO;
 import com.jeez.zp.platform.vo.RoomCategoryDetailRowVO;
+import com.jeez.zp.platform.vo.RoomCategoryRoomRowVO;
 import com.jeez.zp.platform.vo.RoomCategoryRoomViewVO;
 import org.apache.ibatis.annotations.Param;
 
@@ -53,6 +54,11 @@ public interface RoomCategoryMapper {
             @Param("poiId") Long poiId,
             @Param("roomCategoryId") Long roomCategoryId,
             @Param("roomNames") List<String> roomNames
+    );
+
+    List<RoomCategoryRoomRowVO> selectActiveRoomsByCategory(
+            @Param("campId") Long campId,
+            @Param("roomCategoryId") Long roomCategoryId
     );
 
     int disableLinkages(@Param("campId") Long campId, @Param("roomCategoryId") Long roomCategoryId);
@@ -172,11 +178,31 @@ public interface RoomCategoryMapper {
 
     int deleteRoomsByCategory(@Param("campId") Long campId, @Param("roomCategoryId") Long roomCategoryId, @Param("userId") Long userId);
 
+    int deleteRoomsByIds(
+            @Param("campId") Long campId,
+            @Param("roomIds") List<Long> roomIds,
+            @Param("userId") Long userId
+    );
+
+    int countCurrentOrFutureOrdersByCategory(@Param("campId") Long campId, @Param("roomCategoryId") Long roomCategoryId);
+
+    int countCurrentOrFutureOrdersByRooms(@Param("campId") Long campId, @Param("roomIds") List<Long> roomIds);
+
     int deleteCleanTasksByCategory(@Param("campId") Long campId, @Param("roomCategoryId") Long roomCategoryId);
 
     int deleteRoomCategory(@Param("campId") Long campId, @Param("roomCategoryId") Long roomCategoryId, @Param("userId") Long userId);
 
     int insertRoom(
+            @Param("roomId") Long roomId,
+            @Param("campId") Long campId,
+            @Param("poiId") Long poiId,
+            @Param("roomCategoryId") Long roomCategoryId,
+            @Param("roomName") String roomName,
+            @Param("sortNo") Integer sortNo,
+            @Param("userId") Long userId
+    );
+
+    int updateRoom(
             @Param("roomId") Long roomId,
             @Param("campId") Long campId,
             @Param("poiId") Long poiId,

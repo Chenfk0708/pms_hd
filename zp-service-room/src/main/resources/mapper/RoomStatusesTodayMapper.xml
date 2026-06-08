@@ -15,7 +15,7 @@
                 om.guest_mobile AS guestMobile,
                 om.remark AS orderRemark,
                 CAST(ca.channel_id AS CHAR) AS channelId,
-                ca.channel_name AS channelName,
+                COALESCE(ca.channel_name, om.source_label_snapshot, '自来客') AS channelName,
                 om.start_at AS checkInAt,
                 om.end_at AS checkOutAt,
                 om.total_price_cent AS totalPriceCent,

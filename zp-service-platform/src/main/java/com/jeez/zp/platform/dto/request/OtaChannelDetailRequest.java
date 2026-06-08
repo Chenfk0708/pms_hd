@@ -7,4 +7,5 @@ public class OtaChannelDetailRequest {
 
     private String campId;
     private String channelId;
+    private String accountId;
 }

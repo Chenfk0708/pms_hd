@@ -37,7 +37,22 @@
             CAST(p.poi_id AS CHAR) AS id,
             p.poi_name AS name,
             p.poi_name AS label,
-            CAST(p.poi_id AS CHAR) AS value
+            CAST(p.poi_id AS CHAR) AS value,
+            p.poi_type AS poiType,
+            p.poi_type AS typeName,
+            p.address AS address,
+            p.contact_number AS contactNumber,
+            p.city_name AS cityName,
+            p.city_path AS cityPath,
+            p.street_address AS streetAddress,
+            p.community_name AS communityName,
+            p.unit_no AS unitNo,
+            p.full_address AS fullAddress,
+            CAST(p.tags_json AS CHAR) AS tagsJson,
+            p.plain_intro AS plainIntro,
+            p.rich_intro AS richIntro,
+            p.cover_image_data_url AS coverImageDataUrl,
+            p.photo_count AS photoCount
         <include refid="poiFilters"/>
         ORDER BY p.sort_no ASC, p.poi_id ASC
         LIMIT #{offset}, #{pageSize}

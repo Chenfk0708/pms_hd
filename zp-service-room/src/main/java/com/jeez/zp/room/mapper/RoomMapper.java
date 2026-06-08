@@ -7,6 +7,7 @@ import com.jeez.zp.room.vo.RoomStatusesRoomsCategoryVO;
 import com.jeez.zp.room.vo.RoomStatusesRoomsRoomVO;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface RoomMapper {
@@ -46,7 +47,9 @@ public interface RoomMapper {
             @Param("campId") Long campId,
             @Param("roomCategoryIds") List<Long> roomCategoryIds,
             @Param("poiIds") List<Long> poiIds,
-            @Param("keyword") String keyword
+            @Param("keyword") String keyword,
+            @Param("startAt") LocalDateTime startAt,
+            @Param("endAt") LocalDateTime endAt
     );
 
     List<RoomStatusesRoomsCategoryVO> selectRoomStatusesRoomCategories(
@@ -54,6 +57,8 @@ public interface RoomMapper {
             @Param("roomCategoryIds") List<Long> roomCategoryIds,
             @Param("poiIds") List<Long> poiIds,
             @Param("keyword") String keyword,
+            @Param("startAt") LocalDateTime startAt,
+            @Param("endAt") LocalDateTime endAt,
             @Param("offset") long offset,
             @Param("pageSize") int pageSize
     );
@@ -62,6 +67,8 @@ public interface RoomMapper {
             @Param("campId") Long campId,
             @Param("roomCategoryIds") List<Long> roomCategoryIds,
             @Param("poiIds") List<Long> poiIds,
-            @Param("keyword") String keyword
+            @Param("keyword") String keyword,
+            @Param("startAt") LocalDateTime startAt,
+            @Param("endAt") LocalDateTime endAt
     );
 }

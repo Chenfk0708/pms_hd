@@ -1,14 +1,18 @@
 package com.jeez.zp.platform.controller;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -16,6 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Transactional
 class PlatformBootstrapControllerIT {
 
     private static final String AUTH_VERIFIED_HEADER = "X-Auth-Verified";
@@ -23,6 +28,65 @@ class PlatformBootstrapControllerIT {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void resetSeedCampAndPoi() {
+        jdbcTemplate.update("""
+                        UPDATE pms_camp
+                        SET name = ?,
+                            city_name = ?,
+                            address = ?,
+                            contact_number = ?,
+                            status = ?,
+                            is_deleted = ?
+                        WHERE camp_id = ?
+                        """,
+                "路客云演示租户",
+                "深圳市",
+                "深圳市南山区科技园演示地址 1 号",
+                "13800000001",
+                1,
+                0,
+                10001L
+        );
+        jdbcTemplate.update("""
+                        UPDATE pms_poi
+                        SET poi_name = ?,
+                            poi_type = ?,
+                            is_availability = ?,
+                            sort_no = ?,
+                            address = ?,
+                            contact_number = ?,
+                            city_name = NULL,
+                            city_path = NULL,
+                            street_address = NULL,
+                            community_name = NULL,
+                            unit_no = NULL,
+                            full_address = NULL,
+                            tags_json = NULL,
+                            plain_intro = NULL,
+                            rich_intro = NULL,
+                            cover_image_data_url = NULL,
+                            photo_count = ?,
+                            status = ?,
+                            is_deleted = ?
+                        WHERE poi_id = ?
+                        """,
+                "路客云演示门店",
+                "hotel",
+                1,
+                1,
+                "深圳市南山区科技园演示地址 1 号",
+                "13800000001",
+                0,
+                1,
+                0,
+                11001L
+        );
+    }
 
     @Test
     @Timeout(60)
@@ -82,6 +146,162 @@ class PlatformBootstrapControllerIT {
                 .andExpect(jsonPath("$.data.address").value("深圳市南山区科技园演示地址 1 号"))
                 .andExpect(jsonPath("$.data.contactNumber").value("13800000001"))
                 .andExpect(jsonPath("$.data.camp.campId").value(10001));
+    }
+
+    @Test
+    @Timeout(60)
+    @Transactional
+    void campSave_shouldPersistEditableCampFields() throws Exception {
+        jdbcTemplate.update(
+                "DELETE FROM system_config WHERE camp_id = ? AND config_key = ? AND config_scope = 'camp'",
+                10001L,
+                "hudson.campInfo.tags"
+        );
+
+        mockMvc.perform(post("/camp/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "campName":"联调门店-已保存",
+                                  "name":"联调门店-已保存",
+                                  "phone":"13900001111",
+                                  "contactNumber":"13900001111",
+                                  "cityName":"深圳市",
+                                  "cityPath":"深圳市",
+                                  "address":"深圳市南山区联调路 88 号",
+                                  "fullAddress":"深圳市南山区联调路 88 号",
+                                  "tags":["联调标签","阳台观景"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.traceId").exists())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.data.campId").value(10001))
+                .andExpect(jsonPath("$.data.name").value("联调门店-已保存"))
+                .andExpect(jsonPath("$.data.contactNumber").value("13900001111"))
+                .andExpect(jsonPath("$.data.address").value("深圳市南山区联调路 88 号"))
+                .andExpect(jsonPath("$.data.tags", hasItem("联调标签")));
+
+        mockMvc.perform(post("/camp/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campId":"10001"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.name").value("联调门店-已保存"))
+                .andExpect(jsonPath("$.data.contactNumber").value("13900001111"))
+                .andExpect(jsonPath("$.data.address").value("深圳市南山区联调路 88 号"))
+                .andExpect(jsonPath("$.data.tags", hasItem("联调标签")));
+    }
+
+    @Test
+    @Timeout(60)
+    @Transactional
+    void campSave_shouldPersistPoiSpecificEditableFields() throws Exception {
+        mockMvc.perform(post("/camp/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "storeId":"11001",
+                                  "campName":"TDD Store Saved",
+                                  "name":"TDD Store Saved",
+                                  "typeName":"Apartment",
+                                  "campTypeName":"Apartment",
+                                  "phone":"13900001111",
+                                  "contactNumber":"13900001111",
+                                  "cityName":"Shenzhen",
+                                  "cityPath":"Guangdong/Shenzhen/Nanshan",
+                                  "address":"TDD Road 88",
+                                  "streetAddress":"TDD Road",
+                                  "communityName":"TDD Garden",
+                                  "unitNo":"8-808",
+                                  "fullAddress":"TDD Road 88",
+                                  "tags":["integration","balcony"],
+                                  "plainIntro":"Plain intro saved",
+                                  "richIntro":"<p>Rich intro saved</p>",
+                                  "coverImageDataUrl":"data:image/png;base64,abc123",
+                                  "photoCount":1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.campId").value(10001))
+                .andExpect(jsonPath("$.data.poiId").value(11001))
+                .andExpect(jsonPath("$.data.name").value("TDD Store Saved"))
+                .andExpect(jsonPath("$.data.poiName").value("TDD Store Saved"))
+                .andExpect(jsonPath("$.data.typeName").value("Apartment"))
+                .andExpect(jsonPath("$.data.contactNumber").value("13900001111"))
+                .andExpect(jsonPath("$.data.cityName").value("Shenzhen"))
+                .andExpect(jsonPath("$.data.cityPath").value("Guangdong/Shenzhen/Nanshan"))
+                .andExpect(jsonPath("$.data.address").value("TDD Road 88"))
+                .andExpect(jsonPath("$.data.streetAddress").value("TDD Road"))
+                .andExpect(jsonPath("$.data.communityName").value("TDD Garden"))
+                .andExpect(jsonPath("$.data.unitNo").value("8-808"))
+                .andExpect(jsonPath("$.data.fullAddress").value("TDD Road 88"))
+                .andExpect(jsonPath("$.data.tags", hasItem("integration")))
+                .andExpect(jsonPath("$.data.plainIntro").value("Plain intro saved"))
+                .andExpect(jsonPath("$.data.richIntro").value("<p>Rich intro saved</p>"))
+                .andExpect(jsonPath("$.data.coverImageDataUrl").value("data:image/png;base64,abc123"))
+                .andExpect(jsonPath("$.data.photoCount").value(1));
+
+        mockMvc.perform(post("/camp/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campId":"10001","storeId":"11001"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.poiId").value(11001))
+                .andExpect(jsonPath("$.data.name").value("TDD Store Saved"))
+                .andExpect(jsonPath("$.data.poiName").value("TDD Store Saved"))
+                .andExpect(jsonPath("$.data.typeName").value("Apartment"))
+                .andExpect(jsonPath("$.data.contactNumber").value("13900001111"))
+                .andExpect(jsonPath("$.data.cityPath").value("Guangdong/Shenzhen/Nanshan"))
+                .andExpect(jsonPath("$.data.streetAddress").value("TDD Road"))
+                .andExpect(jsonPath("$.data.communityName").value("TDD Garden"))
+                .andExpect(jsonPath("$.data.unitNo").value("8-808"))
+                .andExpect(jsonPath("$.data.fullAddress").value("TDD Road 88"))
+                .andExpect(jsonPath("$.data.tags", hasItem("integration")))
+                .andExpect(jsonPath("$.data.plainIntro").value("Plain intro saved"))
+                .andExpect(jsonPath("$.data.richIntro").value("<p>Rich intro saved</p>"))
+                .andExpect(jsonPath("$.data.coverImageDataUrl").value("data:image/png;base64,abc123"))
+                .andExpect(jsonPath("$.data.photoCount").value(1));
+
+        mockMvc.perform(post("/select/poi/page/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "pageSize":999,
+                                  "pageNum":1,
+                                  "isAvailability":"1"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.list[0].poiId").value("11001"))
+                .andExpect(jsonPath("$.data.list[0].poiName").value("TDD Store Saved"))
+                .andExpect(jsonPath("$.data.list[0].poiType").value("Apartment"))
+                .andExpect(jsonPath("$.data.list[0].address").value("TDD Road 88"))
+                .andExpect(jsonPath("$.data.list[0].contactNumber").value("13900001111"))
+                .andExpect(jsonPath("$.data.list[0].cityPath").value("Guangdong/Shenzhen/Nanshan"))
+                .andExpect(jsonPath("$.data.list[0].coverImageDataUrl").value("data:image/png;base64,abc123"))
+                .andExpect(jsonPath("$.data.list[0].photoCount").value(1))
+                .andExpect(jsonPath("$.data.list[0].tagsJson").value("[\"integration\",\"balcony\"]"));
     }
 
     @Test

@@ -22,6 +22,7 @@ public class RoomCategorySaveRequest {
         private String groupId;
         private String roomCategoryGroupId;
         private String roomCount;
+        private List<String> roomIds;
         private List<String> roomNos;
         private String weekdayPrice;
         private String weekendPrice;

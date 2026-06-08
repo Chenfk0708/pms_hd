@@ -1,6 +1,7 @@
 package com.jeez.zp.platform.service;
 
 import com.jeez.zp.platform.dto.request.VersionSubscriptionOrderSubmitRequest;
+import com.jeez.zp.platform.dto.request.CampSaveRequest;
 import com.jeez.zp.platform.vo.CampsResponseVO;
 import com.jeez.zp.platform.vo.CampDetailVO;
 import com.jeez.zp.platform.vo.ChannelsResponseVO;
@@ -22,7 +23,9 @@ public interface PlatformBootstrapService {
 
     UserOwnVO getOwnUser(Long userId);
 
-    CampDetailVO getCamp(Long campId, Long userId);
+    CampDetailVO getCamp(Long campId, Long poiId, Long userId);
+
+    CampDetailVO saveCamp(CampSaveRequest request, Long userId);
 
     MenuProjectVO getProjectMenus(Long campId, Long projectMenuId);
 

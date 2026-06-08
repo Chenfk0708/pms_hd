@@ -36,6 +36,9 @@ class OtaQueryIT {
     private static final long UNLINKED_ROOM_CATEGORY_ID = 29936L;
     private static final long CTRIP_POI_REL_ID = 29937L;
     private static final long CTRIP_ROOM_REL_ID = 29938L;
+    private static final long LEGACY_CTRIP_ACCOUNT_ID = 29939L;
+    private static final long LEGACY_CTRIP_POI_REL_ID = 29940L;
+    private static final long LEGACY_CTRIP_ROOM_REL_ID = 29941L;
 
     @Autowired
     private MockMvc mockMvc;
@@ -136,6 +139,41 @@ class OtaQueryIT {
                 .andExpect(jsonPath("$.data.storeRows[0].relatedRoomTypeSummary").value("1/2"))
                 .andExpect(jsonPath("$.data.storeRows[0].status").value("linked"))
                 .andExpect(jsonPath("$.data.syncStoreDefaults.hotelSubtype").value("prepay"));
+    }
+
+    @Test
+    @Timeout(60)
+    void otaChannelDetailGet_shouldPreferAccountIdWhenChannelKeyDiffersFromStoredNumericChannel() throws Exception {
+        seedOtaScene();
+        insertChannelAccount(LEGACY_CTRIP_ACCOUNT_ID, 2L, "Ctrip", "Ctrip Account By Id", "authorized",
+                LocalDateTime.of(2026, 5, 21, 9, 0, 0),
+                LocalDateTime.of(2026, 5, 21, 10, 0, 0));
+        insertChannelPoiRel(LEGACY_CTRIP_POI_REL_ID, LEGACY_CTRIP_ACCOUNT_ID, "CTRIP-ACCOUNT-POI");
+        insertChannelRoomCategoryRel(
+                LEGACY_CTRIP_ROOM_REL_ID,
+                LEGACY_CTRIP_ACCOUNT_ID,
+                LINKED_ROOM_CATEGORY_ID,
+                "CTRIP-ACCOUNT-ID-ROOM"
+        );
+
+        mockMvc.perform(post("/ota/channel/detail/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, String.valueOf(CURRENT_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"29931",
+                                  "channelId":"ctrip",
+                                  "accountId":"29939"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accountOptions[1].value").value("29939"))
+                .andExpect(jsonPath("$.data.storeRows[0].accountId").value("29939"))
+                .andExpect(jsonPath("$.data.storeRows[0].hotelId").value("CTRIP-ACCOUNT-POI"))
+                .andExpect(jsonPath("$.data.roomRows[0].channelRoomType").value("CTRIP-ACCOUNT-ID-ROOM"));
     }
 
     @Test
@@ -354,6 +392,10 @@ class OtaQueryIT {
     }
 
     private void insertChannelPoiRel() {
+        insertChannelPoiRel(CTRIP_POI_REL_ID, CTRIP_ACCOUNT_ID, "CTRIP-POI-001");
+    }
+
+    private void insertChannelPoiRel(long relId, long accountId, String outPoiId) {
         jdbcTemplate.update("""
                         INSERT INTO channel_poi_rel (
                             id,
@@ -366,11 +408,11 @@ class OtaQueryIT {
                             updated_at
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                CTRIP_POI_REL_ID,
+                relId,
                 ISOLATED_CAMP_ID,
-                CTRIP_ACCOUNT_ID,
+                accountId,
                 POI_ID,
-                "CTRIP-POI-001",
+                outPoiId,
                 "success",
                 Timestamp.valueOf(LocalDateTime.of(2026, 5, 20, 11, 0, 0)),
                 Timestamp.valueOf(LocalDateTime.of(2026, 5, 20, 11, 15, 0))
@@ -378,6 +420,15 @@ class OtaQueryIT {
     }
 
     private void insertChannelRoomCategoryRel() {
+        insertChannelRoomCategoryRel(CTRIP_ROOM_REL_ID, CTRIP_ACCOUNT_ID, LINKED_ROOM_CATEGORY_ID, "CTRIP-DELUXE-ROOM");
+    }
+
+    private void insertChannelRoomCategoryRel(
+            long relId,
+            long accountId,
+            long roomCategoryId,
+            String outRoomCategoryId
+    ) {
         jdbcTemplate.update("""
                         INSERT INTO channel_room_category_rel (
                             id,
@@ -392,11 +443,11 @@ class OtaQueryIT {
                             updated_at
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                CTRIP_ROOM_REL_ID,
+                relId,
                 ISOLATED_CAMP_ID,
-                CTRIP_ACCOUNT_ID,
-                LINKED_ROOM_CATEGORY_ID,
-                "CTRIP-DELUXE-ROOM",
+                accountId,
+                roomCategoryId,
+                outRoomCategoryId,
                 "calendar_room",
                 "on_shelf",
                 "approved",

@@ -8,13 +8,13 @@ import org.springframework.context.annotation.FilterType;
 
 @SpringBootApplication
 @ComponentScan(
-        basePackages = {"com.jeez.zp.order", "com.jeez.common"},
+        basePackages = {"com.jeez.zp.order", "com.jeez.zp.finance", "com.jeez.common"},
         excludeFilters = @ComponentScan.Filter(
                 type = FilterType.REGEX,
                 pattern = "com\\.jeez\\.common\\.mq\\..*"
         )
 )
-@MapperScan("com.jeez.zp.order.mapper")
+@MapperScan({"com.jeez.zp.order.mapper", "com.jeez.zp.finance.mapper"})
 public class ZpServiceOrderApplication {
 
     public static void main(String[] args) {

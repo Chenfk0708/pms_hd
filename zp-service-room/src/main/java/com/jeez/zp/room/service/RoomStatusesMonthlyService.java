@@ -1,5 +1,7 @@
 package com.jeez.zp.room.service;
 
+import com.jeez.zp.room.dto.request.RoomStatusCloseRequest;
+import com.jeez.zp.room.vo.RoomStatusCloseResponseVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyBlockVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyDailyMonitorVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyInventoryVO;
@@ -11,6 +13,10 @@ import com.jeez.zp.room.vo.RoomStatusesMonthlyRedDotVO;
 import java.util.List;
 
 public interface RoomStatusesMonthlyService {
+
+    RoomStatusCloseResponseVO closeRoom(RoomStatusCloseRequest request, Long userId);
+
+    RoomStatusCloseResponseVO openRoom(RoomStatusCloseRequest request, Long userId);
 
     RoomStatusesMonthlyListResponseVO<RoomStatusesMonthlyInventoryVO> getInventory(
             Long campId,

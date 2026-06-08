@@ -1,5 +1,6 @@
 package com.jeez.zp.platform.controller;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,32 @@ class PoiQueryIT {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void resetSeedPoi() {
+        jdbcTemplate.update("""
+                        UPDATE pms_poi
+                        SET poi_name = ?,
+                            poi_type = ?,
+                            is_availability = ?,
+                            sort_no = ?,
+                            address = ?,
+                            contact_number = ?,
+                            status = ?,
+                            is_deleted = ?
+                        WHERE poi_id = ?
+                        """,
+                "路客云演示门店",
+                "hotel",
+                1,
+                1,
+                "深圳市南山区科技园演示地址 1 号",
+                "13800000001",
+                1,
+                0,
+                11001L
+        );
+    }
 
     @Test
     @Timeout(60)

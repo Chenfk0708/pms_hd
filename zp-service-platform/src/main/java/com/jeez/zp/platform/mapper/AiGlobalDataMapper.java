@@ -8,4 +8,11 @@ import java.util.List;
 public interface AiGlobalDataMapper {
 
     List<AiGlobalStrongReminderRowVO> selectStrongReminderRows(@Param("campId") Long campId);
+
+    int markStrongReminderAction(
+            @Param("campId") Long campId,
+            @Param("orderId") Long orderId,
+            @Param("action") String action,
+            @Param("userId") Long userId
+    );
 }

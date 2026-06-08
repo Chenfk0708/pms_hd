@@ -133,30 +133,48 @@
     <select id="selectCampDetail" resultType="com.jeez.zp.platform.vo.CampDetailVO">
         SELECT
             c.camp_id AS campId,
-            c.name AS name,
-            c.city_name AS cityName,
-            c.address AS address,
-            c.contact_number AS contactNumber,
+            c.name AS campName,
+            <choose>
+                <when test="poiId != null">
+                    COALESCE(p.poi_name, c.name) AS name,
+                </when>
+                <otherwise>
+                    c.name AS name,
+                </otherwise>
+            </choose>
+            COALESCE(p.city_name, c.city_name) AS cityName,
+            COALESCE(p.full_address, p.address, c.address) AS address,
+            COALESCE(p.contact_number, c.contact_number) AS contactNumber,
             p.poi_id AS poiId,
-            p.poi_name AS poiName
+            p.poi_name AS poiName,
+            p.poi_type AS poiType,
+            p.poi_type AS typeName,
+            p.poi_type AS campTypeName,
+            COALESCE(p.contact_number, c.contact_number) AS phone,
+            p.city_path AS cityPath,
+            p.street_address AS streetAddress,
+            p.community_name AS communityName,
+            p.unit_no AS unitNo,
+            COALESCE(p.full_address, p.address, c.address) AS fullAddress,
+            CAST(COALESCE(p.tags_json, tags_cfg.config_value) AS CHAR) AS tagsJson,
+            p.plain_intro AS plainIntro,
+            p.rich_intro AS richIntro,
+            p.cover_image_data_url AS coverImageDataUrl,
+            p.photo_count AS photoCount
         FROM pms_camp c
-        LEFT JOIN (
-            SELECT camp_id, poi_id, poi_name
-            FROM (
-                SELECT
-                    poi.camp_id,
-                    poi.poi_id,
-                    poi.poi_name,
-                    ROW_NUMBER() OVER (PARTITION BY poi.camp_id ORDER BY poi.sort_no ASC, poi.poi_id ASC) AS row_num
-                FROM pms_poi poi
-                WHERE poi.is_deleted = 0
-                  AND poi.status = 1
-            ) ranked_poi
-            WHERE ranked_poi.row_num = 1
-        ) p ON p.camp_id = c.camp_id
+        LEFT JOIN pms_poi p ON p.camp_id = c.camp_id
+            AND p.is_deleted = 0
+            AND p.status = 1
+            <if test="poiId != null">
+                AND p.poi_id = #{poiId}
+            </if>
+        LEFT JOIN system_config tags_cfg ON tags_cfg.camp_id = c.camp_id
+            AND tags_cfg.config_scope = 'camp'
+            AND tags_cfg.config_key = 'hudson.campInfo.tags'
         WHERE c.camp_id = #{campId}
           AND c.is_deleted = 0
           AND c.status = 1
+        ORDER BY p.sort_no ASC, p.poi_id ASC
         LIMIT 1
     </select>
 

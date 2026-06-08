@@ -83,6 +83,12 @@
                 #{roomCategoryId}
             </foreach>
         </if>
+        <if test="poiIds != null and poiIds.size() > 0">
+            AND rc.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
         <if test="channelIds != null and channelIds.size() > 0">
             AND ch.channel_id IN
             <foreach collection="channelIds" item="channelId" open="(" separator="," close=")">
@@ -91,6 +97,142 @@
         </if>
         ORDER BY rc.sort_no ASC, rc.room_category_id ASC, ch.sort_account_id ASC, ch.channel_id ASC
     </select>
+
+    <select id="selectCentralPriceSnapshots" resultType="com.jeez.zp.room.vo.RoomCategoryPriceSnapshotRowVO">
+        SELECT
+            CAST(room_category_id AS CHAR) AS roomCategoryId,
+            DATE_FORMAT(biz_date, '%Y-%m-%d') AS bizDate,
+            price_cent AS priceCent,
+            status AS status
+        FROM room_price_snapshot
+        WHERE camp_id = #{campId}
+          AND price_type = 'central'
+          AND channel_id = 0
+          AND biz_date &gt;= #{startDate}
+          AND biz_date &lt;= #{endDate}
+        <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">
+            AND room_category_id IN
+            <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                #{roomCategoryId}
+            </foreach>
+        </if>
+        ORDER BY room_category_id ASC, biz_date ASC, updated_at DESC, id DESC
+    </select>
+
+    <select id="selectAvailableStockRows" resultType="com.jeez.zp.room.vo.RoomCategoryAvailableStockRowVO">
+        WITH RECURSIVE date_range AS (
+            SELECT #{startDate} AS biz_date
+            UNION ALL
+            SELECT DATE_ADD(biz_date, INTERVAL 1 DAY)
+            FROM date_range
+            WHERE biz_date &lt; #{endDate}
+        ),
+        categories AS (
+            SELECT
+                rc.camp_id,
+                rc.room_category_id
+            FROM room_category rc
+            WHERE rc.camp_id = #{campId}
+              AND rc.status = 1
+              AND rc.is_deleted = 0
+            <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">
+                AND rc.room_category_id IN
+                <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                    #{roomCategoryId}
+                </foreach>
+            </if>
+            <if test="poiIds != null and poiIds.size() > 0">
+                AND rc.poi_id IN
+                <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                    #{poiId}
+                </foreach>
+            </if>
+        )
+        SELECT
+            CAST(c.room_category_id AS CHAR) AS roomCategoryId,
+            DATE_FORMAT(d.biz_date, '%Y-%m-%d') AS date,
+            COUNT(DISTINCT CASE
+                WHEN rsb.block_id IS NULL AND om.order_id IS NULL THEN r.room_id
+                ELSE NULL
+            END) AS totalStock
+        FROM categories c
+        JOIN date_range d ON 1 = 1
+        LEFT JOIN room r ON r.camp_id = c.camp_id
+            AND r.room_category_id = c.room_category_id
+            AND r.status = 1
+            AND r.is_deleted = 0
+            AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+            <if test="poiIds != null and poiIds.size() > 0">
+                AND r.poi_id IN
+                <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                    #{poiId}
+                </foreach>
+            </if>
+        LEFT JOIN room_status_block rsb ON rsb.camp_id = c.camp_id
+            AND rsb.room_category_id = c.room_category_id
+            AND rsb.room_id = r.room_id
+            AND rsb.biz_date = d.biz_date
+            AND rsb.status = 'closed'
+            AND rsb.is_deleted = 0
+        LEFT JOIN order_main om ON om.camp_id = c.camp_id
+            AND om.room_category_id = c.room_category_id
+            AND om.room_id = r.room_id
+            AND om.is_deleted = 0
+            AND om.status NOT IN ('cancelled', 'canceled')
+            AND (
+                (
+                    om.order_type = 'hourly_room'
+                    AND DATE(om.start_at) &lt;= d.biz_date
+                    AND DATE(om.end_at) &gt;= d.biz_date
+                )
+                OR (
+                    om.order_type != 'hourly_room'
+                    AND DATE(om.start_at) &lt;= d.biz_date
+                    AND DATE(om.end_at) &gt; d.biz_date
+                )
+            )
+        GROUP BY c.room_category_id, d.biz_date
+        ORDER BY c.room_category_id ASC, d.biz_date ASC
+    </select>
+
+    <insert id="upsertCentralSaleStatus">
+        INSERT INTO room_price_snapshot (
+            id,
+            camp_id,
+            poi_id,
+            room_category_id,
+            biz_date,
+            price_type,
+            channel_id,
+            price_cent,
+            currency,
+            status,
+            created_at,
+            updated_at
+        )
+        SELECT
+            #{id},
+            rc.camp_id,
+            rc.poi_id,
+            rc.room_category_id,
+            #{bizDate},
+            'central',
+            0,
+            COALESCE(rc.weekday_price_cent, 0),
+            'CNY',
+            #{snapshotStatus},
+            NOW(),
+            NOW()
+        FROM room_category rc
+        WHERE rc.camp_id = #{campId}
+          AND rc.room_category_id = #{roomCategoryId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        ON DUPLICATE KEY UPDATE
+            price_cent = VALUES(price_cent),
+            status = VALUES(status),
+            updated_at = NOW()
+    </insert>
 
     <select id="selectRetailRows" resultType="com.jeez.zp.room.vo.RoomCategoryPricingRowVO">
         SELECT

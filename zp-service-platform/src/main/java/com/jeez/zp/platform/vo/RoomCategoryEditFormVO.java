@@ -13,6 +13,7 @@ public class RoomCategoryEditFormVO {
     private String storeId;
     private String groupId;
     private String roomCount;
+    private List<String> roomIds;
     private List<String> roomNos;
     private String weekdayPrice;
     private String weekendPrice;

@@ -35,6 +35,8 @@ public interface RoomService {
             List<Long> roomCategoryIds,
             List<Long> poiIds,
             Long storeId,
+            String startDate,
+            Integer days,
             String queryCode,
             Integer page,
             Integer pageNum,

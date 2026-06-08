@@ -3,6 +3,7 @@ package com.jeez.zp.platform.controller;
 import com.jeez.zp.platform.api.HudsonResponse;
 import com.jeez.zp.platform.api.TraceIdFactory;
 import com.jeez.zp.platform.dto.request.CampIdRequest;
+import com.jeez.zp.platform.dto.request.CampSaveRequest;
 import com.jeez.zp.platform.dto.request.MenuOptionJsonRequest;
 import com.jeez.zp.platform.dto.request.MenuProjectRequest;
 import com.jeez.zp.platform.dto.request.VersionSubscriptionOrderSubmitRequest;
@@ -44,8 +45,20 @@ public class PlatformBootstrapController {
     @PostMapping("/camp/get")
     public HudsonResponse<CampDetailVO> getCamp(@RequestBody CampIdRequest request) {
         return HudsonResponse.success(
-                platformBootstrapService.getCamp(parseLong(request.getCampId()), LoginUserContext.requiredUserId()),
+                platformBootstrapService.getCamp(
+                        parseLong(request.getCampId()),
+                        parseLong(firstText(request.getPoiId(), request.getStoreId())),
+                        LoginUserContext.requiredUserId()
+                ),
                 TraceIdFactory.next("camp-get")
+        );
+    }
+
+    @PostMapping("/camp/save")
+    public HudsonResponse<CampDetailVO> saveCamp(@RequestBody CampSaveRequest request) {
+        return HudsonResponse.success(
+                platformBootstrapService.saveCamp(request, LoginUserContext.requiredUserId()),
+                TraceIdFactory.next("camp-save")
         );
     }
 
@@ -104,5 +117,17 @@ public class PlatformBootstrapController {
             return null;
         }
         return Long.valueOf(value);
+    }
+
+    private String firstText(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 }

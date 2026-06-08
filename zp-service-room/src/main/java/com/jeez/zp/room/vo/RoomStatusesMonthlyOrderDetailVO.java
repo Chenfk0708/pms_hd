@@ -14,6 +14,12 @@ public class RoomStatusesMonthlyOrderDetailVO {
     private String channelName;
     private BigDecimal roomFee;
     private BigDecimal totalIncome;
+    private String orderType;
+    private String startAt;
+    private String endAt;
+    private String bookingAt;
+    private String guestRegisteredAt;
+    private String checkedOutAt;
     private String stayRange;
     private String phone;
     private String remark;

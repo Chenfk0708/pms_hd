@@ -4,6 +4,8 @@ import com.jeez.zp.platform.exception.BusinessException;
 import com.jeez.zp.platform.mapper.AiGlobalDataMapper;
 import com.jeez.zp.platform.mapper.PlatformBootstrapMapper;
 import com.jeez.zp.platform.service.AiGlobalDataService;
+import com.jeez.zp.platform.vo.AiGlobalExportResponseVO;
+import com.jeez.zp.platform.vo.AiGlobalReminderActionResponseVO;
 import com.jeez.zp.platform.vo.AiGlobalReminderItemVO;
 import com.jeez.zp.platform.vo.AiGlobalReminderPageResponseVO;
 import com.jeez.zp.platform.vo.AiGlobalReminderPaginationVO;
@@ -103,6 +105,77 @@ public class AiGlobalDataServiceImpl implements AiGlobalDataService {
         item.setAuthorizedChannels(new ArrayList<>(authorizedChannels));
         item.setUpdatedAt(LocalDateTime.now(SHANGHAI_ZONE).format(TIMESTAMP_FORMATTER));
         return List.of(item);
+    }
+
+    @Override
+    public AiGlobalExportResponseVO createExportTask(Long campId, Long userId, String channel, String attention, String roomKeyword) {
+        CurrentUserBundleVO bundle = requireCurrentUserBundle(userId);
+        Long resolvedCampId = resolveAccessibleCampId(campId, bundle);
+
+        AiGlobalExportResponseVO response = new AiGlobalExportResponseVO();
+        response.setTaskId("AI-GLOBAL-EXPORT-" + resolvedCampId);
+        response.setFileName("ai-global-radar-" + resolvedCampId + ".csv");
+        response.setContentType("text/csv;charset=UTF-8");
+        response.setDownloadUrl("/api/globalRadar/export/download?campId=" + resolvedCampId);
+        response.setTotal(aiGlobalDataMapper.selectStrongReminderRows(resolvedCampId).size());
+        return response;
+    }
+
+    @Override
+    public AiGlobalReminderActionResponseVO postponeStrongReminder(Long campId, Long userId, String reminderId, String orderNo) {
+        return markStrongReminder(campId, userId, reminderId, orderNo, "postponed", "strong reminder postponed");
+    }
+
+    @Override
+    public AiGlobalReminderActionResponseVO resolveStrongReminder(Long campId, Long userId, String reminderId, String orderNo) {
+        return markStrongReminder(campId, userId, reminderId, orderNo, "resolved", "strong reminder resolved");
+    }
+
+    private AiGlobalReminderActionResponseVO markStrongReminder(
+            Long campId,
+            Long userId,
+            String reminderId,
+            String orderNo,
+            String status,
+            String message
+    ) {
+        CurrentUserBundleVO bundle = requireCurrentUserBundle(userId);
+        Long resolvedCampId = resolveAccessibleCampId(campId, bundle);
+        AiGlobalStrongReminderRowVO row = findStrongReminder(resolvedCampId, reminderId, orderNo);
+        Long orderId = parseLong(row.getOrderId());
+        if (orderId == null || aiGlobalDataMapper.markStrongReminderAction(resolvedCampId, orderId, status, userId) < 1) {
+            throw new BusinessException(40404, "strong reminder order not found");
+        }
+
+        AiGlobalReminderActionResponseVO response = new AiGlobalReminderActionResponseVO();
+        response.setReminderId(row.getOrderId());
+        response.setOrderNo(firstNonBlank(row.getOutOrderNo(), row.getOrderNo(), orderNo, ""));
+        response.setStatus(status);
+        response.setMessage(message);
+        return response;
+    }
+
+    private AiGlobalStrongReminderRowVO findStrongReminder(Long campId, String reminderId, String orderNo) {
+        String normalizedReminderId = trimToNull(reminderId);
+        String normalizedOrderNo = trimToNull(orderNo);
+        if (normalizedReminderId == null && normalizedOrderNo == null) {
+            throw new BusinessException(40002, "reminderId or orderNo is required");
+        }
+
+        return aiGlobalDataMapper.selectStrongReminderRows(campId).stream()
+                .filter(row -> matchesStrongReminder(row, normalizedReminderId, normalizedOrderNo))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(40404, "strong reminder order not found"));
+    }
+
+    private boolean matchesStrongReminder(AiGlobalStrongReminderRowVO row, String reminderId, String orderNo) {
+        if (reminderId != null && reminderId.equals(row.getOrderId())) {
+            return true;
+        }
+        if (orderNo == null) {
+            return false;
+        }
+        return orderNo.equals(row.getOrderNo()) || orderNo.equals(row.getOutOrderNo());
     }
 
     private CurrentUserBundleVO requireCurrentUserBundle(Long userId) {
@@ -243,6 +316,24 @@ public class AiGlobalDataServiceImpl implements AiGlobalDataService {
             }
         }
         return "";
+    }
+
+    private Long parseLong(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private String trimToNull(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        return value.trim();
     }
 
     private boolean hasText(String value) {

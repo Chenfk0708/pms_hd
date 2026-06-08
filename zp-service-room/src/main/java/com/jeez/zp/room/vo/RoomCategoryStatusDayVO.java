@@ -9,4 +9,5 @@ public class RoomCategoryStatusDayVO {
     private Long totalStock;
     private Long price;
     private Long salePrice;
+    private Boolean saleEnabled;
 }

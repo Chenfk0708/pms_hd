@@ -1,8 +1,17 @@
 package com.jeez.zp.platform.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jeez.zp.platform.dto.request.CampSaveRequest;
 import com.jeez.zp.platform.dto.request.VersionSubscriptionOrderSubmitRequest;
+import com.jeez.zp.platform.entity.PmsCamp;
+import com.jeez.zp.platform.entity.PmsPoi;
 import com.jeez.zp.platform.exception.BusinessException;
+import com.jeez.zp.platform.mapper.PmsCampMapper;
+import com.jeez.zp.platform.mapper.PmsPoiMapper;
 import com.jeez.zp.platform.mapper.PlatformBootstrapMapper;
 import com.jeez.zp.platform.service.PlatformBootstrapService;
 import com.jeez.zp.platform.vo.CampDetailVO;
@@ -20,11 +29,14 @@ import com.jeez.zp.platform.vo.UserOwnVO;
 import com.jeez.zp.platform.vo.VersionSubscriptionOrderSubmitVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +52,8 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
     private static final DateTimeFormatter ORDER_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final PlatformBootstrapMapper platformBootstrapMapper;
+    private final PmsCampMapper pmsCampMapper;
+    private final PmsPoiMapper pmsPoiMapper;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -96,22 +110,121 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
     }
 
     @Override
-    public CampDetailVO getCamp(Long campId, Long userId) {
+    public CampDetailVO getCamp(Long campId, Long poiId, Long userId) {
         Long resolvedCampId = resolveCampId(campId, userId);
-        CampDetailVO detail = platformBootstrapMapper.selectCampDetail(resolvedCampId);
-        if (detail == null) {
+        CampDetailVO detail = platformBootstrapMapper.selectCampDetail(resolvedCampId, poiId);
+        if (detail == null || (poiId != null && detail.getPoiId() == null)) {
             throw new BusinessException(40404, "门店不存在");
         }
 
-        detail.setCamp(new LinkedHashMap<>(Map.of(
-                "campId", detail.getCampId(),
-                "campName", detail.getName(),
-                "name", detail.getName(),
-                "cityName", detail.getCityName(),
-                "address", detail.getAddress(),
-                "contactNumber", detail.getContactNumber()
-        )));
+        List<String> tags = parseTags(detail.getTagsJson());
+        detail.setTags(tags);
+        detail.setPhone(detail.getContactNumber());
+        detail.setPoiName(firstText(detail.getPoiName(), detail.getName()));
+        detail.setTypeName(firstText(detail.getTypeName(), detail.getPoiType()));
+        detail.setCampTypeName(firstText(detail.getCampTypeName(), detail.getTypeName()));
+        detail.setCityPath(firstText(detail.getCityPath(), detail.getCityName()));
+        detail.setFullAddress(firstText(detail.getFullAddress(), detail.getAddress()));
+        detail.setPhotoCount(detail.getPhotoCount() == null ? 0 : detail.getPhotoCount());
+
+        String campName = firstText(detail.getCampName(), detail.getName());
+        Map<String, Object> camp = new LinkedHashMap<>();
+        camp.put("campId", detail.getCampId());
+        camp.put("campName", campName);
+        camp.put("name", campName);
+        camp.put("poiId", detail.getPoiId());
+        camp.put("poiName", detail.getPoiName());
+        camp.put("typeName", detail.getTypeName());
+        camp.put("campTypeName", detail.getCampTypeName());
+        camp.put("cityName", detail.getCityName());
+        camp.put("cityPath", detail.getCityPath());
+        camp.put("address", detail.getAddress());
+        camp.put("streetAddress", detail.getStreetAddress());
+        camp.put("communityName", detail.getCommunityName());
+        camp.put("unitNo", detail.getUnitNo());
+        camp.put("fullAddress", detail.getFullAddress());
+        camp.put("contactNumber", detail.getContactNumber());
+        camp.put("phone", detail.getPhone());
+        camp.put("tags", tags);
+        camp.put("plainIntro", detail.getPlainIntro());
+        camp.put("richIntro", detail.getRichIntro());
+        camp.put("coverImageDataUrl", detail.getCoverImageDataUrl());
+        camp.put("photoCount", detail.getPhotoCount());
+        detail.setCamp(camp);
         return detail;
+    }
+
+    @Override
+    @Transactional
+    public CampDetailVO saveCamp(CampSaveRequest request, Long userId) {
+        if (request == null) {
+            throw new BusinessException(40001, "门店保存参数不能为空");
+        }
+        Long requestedCampId = parseLong(request.getCampId());
+        Long resolvedCampId = resolveAccessibleCampId(requestedCampId, userId);
+        String campName = requireText(firstText(request.getCampName(), request.getName()), "门店名称不能为空");
+        String cityName = firstText(request.getCityName(), request.getCityPath());
+        String address = firstText(request.getFullAddress(), request.getAddress(), request.getStreetAddress());
+        String contactNumber = firstText(request.getContactNumber(), request.getPhone());
+        String poiType = firstText(request.getTypeName(), request.getCampTypeName());
+        List<String> tags = normalizeTags(request.getTags());
+        String tagsJson = serializeConfigValue(tags);
+        LocalDateTime now = LocalDateTime.now();
+
+        String requestedPoiRef = firstText(request.getPoiId(), request.getStoreId());
+        Long requestedPoiId = parseOptionalLong(requestedPoiRef);
+        PmsPoi existingPoi = requestedPoiId == null
+                ? (requestedPoiRef == null ? findFirstActivePoi(resolvedCampId) : null)
+                : findAccessiblePoi(resolvedCampId, requestedPoiId);
+        Long savedPoiId = existingPoi == null ? IdWorker.getId() : existingPoi.getPoiId();
+
+        PmsPoi poi = new PmsPoi();
+        poi.setPoiId(savedPoiId);
+        poi.setCampId(resolvedCampId);
+        poi.setPoiName(campName);
+        poi.setPoiType(poiType);
+        poi.setIsAvailability(1);
+        poi.setAddress(address);
+        poi.setContactNumber(contactNumber);
+        poi.setCityName(cityName);
+        poi.setCityPath(firstText(request.getCityPath(), cityName));
+        poi.setStreetAddress(firstText(request.getStreetAddress(), request.getAddress(), address));
+        poi.setCommunityName(firstText(request.getCommunityName()));
+        poi.setUnitNo(firstText(request.getUnitNo()));
+        poi.setFullAddress(firstText(request.getFullAddress(), address));
+        poi.setTagsJson(tagsJson);
+        poi.setPlainIntro(firstText(request.getPlainIntro()));
+        poi.setRichIntro(firstText(request.getRichIntro()));
+        poi.setCoverImageDataUrl(firstText(request.getCoverImageDataUrl()));
+        poi.setPhotoCount(request.getPhotoCount() == null ? 0 : Math.max(request.getPhotoCount(), 0));
+        poi.setStatus(1);
+        poi.setUpdatedBy(userId);
+        poi.setUpdatedAt(now);
+
+        if (existingPoi == null) {
+            poi.setSortNo(nextPoiSortNo(resolvedCampId));
+            poi.setCreatedBy(userId);
+            poi.setCreatedAt(now);
+            poi.setIsDeleted(0);
+            poi.setVersionNo(0);
+            pmsPoiMapper.insert(poi);
+        } else {
+            pmsPoiMapper.updateById(poi);
+        }
+
+        if (shouldMirrorToCamp(resolvedCampId, savedPoiId)) {
+            PmsCamp camp = new PmsCamp();
+            camp.setCampId(resolvedCampId);
+            camp.setName(campName);
+            camp.setCityName(cityName);
+            camp.setAddress(address);
+            camp.setContactNumber(contactNumber);
+            camp.setUpdatedBy(userId);
+            camp.setUpdatedAt(now);
+            pmsCampMapper.updateById(camp);
+        }
+
+        return getCamp(resolvedCampId, savedPoiId, userId);
     }
 
     @Override
@@ -192,7 +305,7 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
     @Override
     public EditionResourceVO getEditionResource(Long campId, Long userId) {
         Long resolvedCampId = resolveCampId(campId, userId);
-        CampDetailVO campDetail = getCamp(resolvedCampId, userId);
+        CampDetailVO campDetail = getCamp(resolvedCampId, null, userId);
         List<ChannelVO> channels = platformBootstrapMapper.selectChannelsByCampId(resolvedCampId);
 
         long connectedChannels = channels.stream()
@@ -248,7 +361,7 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
             return bundle.getCampId();
         }
         if (!Objects.equals(requestedCampId, bundle.getCampId())) {
-            throw new BusinessException(40301, "无权访问当前门店版本订阅数据");
+            throw new BusinessException(40301, "无权访问当前门店数据");
         }
         return requestedCampId;
     }
@@ -258,6 +371,65 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
             throw new BusinessException(40001, message);
         }
         return value.trim();
+    }
+
+    private String firstText(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private PmsPoi findFirstActivePoi(Long campId) {
+        return pmsPoiMapper.selectOne(new LambdaQueryWrapper<PmsPoi>()
+                .eq(PmsPoi::getCampId, campId)
+                .eq(PmsPoi::getIsDeleted, 0)
+                .eq(PmsPoi::getStatus, 1)
+                .orderByAsc(PmsPoi::getSortNo, PmsPoi::getPoiId)
+                .last("LIMIT 1"));
+    }
+
+    private PmsPoi findAccessiblePoi(Long campId, Long poiId) {
+        PmsPoi poi = pmsPoiMapper.selectOne(new LambdaQueryWrapper<PmsPoi>()
+                .eq(PmsPoi::getCampId, campId)
+                .eq(PmsPoi::getPoiId, poiId)
+                .eq(PmsPoi::getIsDeleted, 0)
+                .last("LIMIT 1"));
+        if (poi == null) {
+            throw new BusinessException(40404, "门店不存在");
+        }
+        return poi;
+    }
+
+    private int nextPoiSortNo(Long campId) {
+        Long count = pmsPoiMapper.selectCount(new LambdaQueryWrapper<PmsPoi>()
+                .eq(PmsPoi::getCampId, campId)
+                .eq(PmsPoi::getIsDeleted, 0));
+        return count == null ? 0 : count.intValue() + 1;
+    }
+
+    private boolean shouldMirrorToCamp(Long campId, Long poiId) {
+        PmsPoi firstPoi = findFirstActivePoi(campId);
+        return firstPoi != null && Objects.equals(firstPoi.getPoiId(), poiId);
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String tag : tags) {
+            String nextTag = firstText(tag);
+            if (nextTag != null && !normalized.contains(nextTag)) {
+                normalized.add(nextTag);
+            }
+        }
+        return normalized;
     }
 
     private String requireSupportedDuration(String duration) {
@@ -291,6 +463,17 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
         return Long.valueOf(value);
     }
 
+    private Long parseOptionalLong(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
     private record EditionPlan(String planId, String displayName) {
     }
 
@@ -302,6 +485,26 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
             return objectMapper.readValue(textValue, Object.class);
         } catch (Exception ignored) {
             return textValue;
+        }
+    }
+
+    private List<String> parseTags(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return Collections.emptyList();
+        }
+        try {
+            return normalizeTags(objectMapper.readValue(rawValue, new TypeReference<List<String>>() {
+            }));
+        } catch (Exception ignored) {
+            return normalizeTags(List.of(rawValue.split("/")));
+        }
+    }
+
+    private String serializeConfigValue(Object configValue) {
+        try {
+            return objectMapper.writeValueAsString(configValue);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(500, "门店标签序列化失败");
         }
     }
 

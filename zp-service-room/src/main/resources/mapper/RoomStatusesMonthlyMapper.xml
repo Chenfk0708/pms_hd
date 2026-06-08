@@ -72,6 +72,352 @@
         </if>
     </sql>
 
+    <sql id="blockFilters">
+        WHERE rsb.camp_id = #{campId}
+          AND rsb.biz_date &gt;= #{startDate}
+          AND rsb.biz_date &lt; #{endDate}
+          AND rsb.status = 'closed'
+          AND rsb.is_deleted = 0
+        <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">
+            AND rsb.room_category_id IN
+            <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                #{roomCategoryId}
+            </foreach>
+        </if>
+        <if test="poiIds != null and poiIds.size() > 0">
+            AND rsb.poi_id IN
+            <foreach collection="poiIds" item="poiId" open="(" separator="," close=")">
+                #{poiId}
+            </foreach>
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                EXISTS (
+                    SELECT 1
+                    FROM room r
+                    WHERE r.room_id = rsb.room_id
+                      AND r.camp_id = rsb.camp_id
+                      AND r.room_name LIKE CONCAT('%', #{keyword}, '%')
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM room_category rc
+                    WHERE rc.room_category_id = rsb.room_category_id
+                      AND rc.camp_id = rsb.camp_id
+                      AND rc.name LIKE CONCAT('%', #{keyword}, '%')
+                )
+            )
+        </if>
+    </sql>
+
+    <select id="selectCloseRoomMeta" resultType="com.jeez.zp.room.vo.RoomStatusCloseRoomMetaVO">
+        SELECT
+            r.camp_id AS campId,
+            r.poi_id AS poiId,
+            r.room_category_id AS roomCategoryId,
+            r.room_id AS roomId
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.room_category_id = #{roomCategoryId}
+          AND r.room_id = #{roomId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+          AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+        LIMIT 1
+    </select>
+
+    <select id="countExistingClosedBlock" resultType="int">
+        SELECT COUNT(1)
+        FROM room_status_block rsb
+        WHERE rsb.camp_id = #{campId}
+          AND rsb.room_id = #{roomId}
+          AND rsb.biz_date = #{bizDate}
+          AND rsb.status = 'closed'
+          AND rsb.is_deleted = 0
+    </select>
+
+    <select id="countOrdersOnRoomDate" resultType="int">
+        SELECT COUNT(1)
+        FROM order_main om
+        WHERE om.camp_id = #{campId}
+          AND om.room_id = #{roomId}
+          AND om.status IN ('booked', 'checked_in')
+          AND om.is_deleted = 0
+          AND (
+            (
+              om.order_type = 'hourly_room'
+              AND DATE(om.start_at) &lt;= #{bizDate}
+              AND DATE(om.end_at) &gt;= #{bizDate}
+            )
+            OR (
+              om.order_type != 'hourly_room'
+              AND DATE(om.start_at) &lt;= #{bizDate}
+              AND DATE(om.end_at) &gt; #{bizDate}
+            )
+          )
+    </select>
+
+    <select id="selectCentralSaleStatusCloseRoomMetas" resultType="com.jeez.zp.room.vo.RoomStatusCloseRoomMetaVO">
+        SELECT
+            r.camp_id AS campId,
+            r.poi_id AS poiId,
+            r.room_category_id AS roomCategoryId,
+            r.room_id AS roomId
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        LEFT JOIN room_status_block rsb ON rsb.camp_id = r.camp_id
+            AND rsb.poi_id = r.poi_id
+            AND rsb.biz_date = #{bizDate}
+            AND rsb.room_id = r.room_id
+            AND rsb.status = 'closed'
+            AND rsb.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.room_category_id = #{roomCategoryId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+          AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+          AND rsb.block_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM order_main om
+            WHERE om.camp_id = r.camp_id
+              AND om.room_id = r.room_id
+              AND om.status IN ('booked', 'checked_in')
+              AND om.is_deleted = 0
+              AND (
+                (
+                  om.order_type = 'hourly_room'
+                  AND DATE(om.start_at) &lt;= #{bizDate}
+                  AND DATE(om.end_at) &gt;= #{bizDate}
+                )
+                OR (
+                  om.order_type != 'hourly_room'
+                  AND DATE(om.start_at) &lt;= #{bizDate}
+                  AND DATE(om.end_at) &gt; #{bizDate}
+                )
+              )
+          )
+        ORDER BY r.sort_no ASC, r.room_id ASC
+    </select>
+
+    <select id="selectCentralSaleStatusClosedBlockMetas" resultType="com.jeez.zp.room.vo.RoomStatusCloseRoomMetaVO">
+        SELECT
+            rsb.camp_id AS campId,
+            rsb.poi_id AS poiId,
+            rsb.room_category_id AS roomCategoryId,
+            rsb.room_id AS roomId
+        FROM room_status_block rsb
+        WHERE rsb.camp_id = #{campId}
+          AND rsb.room_category_id = #{roomCategoryId}
+          AND rsb.biz_date = #{bizDate}
+          AND rsb.reason = #{reason}
+          AND rsb.status = 'closed'
+          AND rsb.is_deleted = 0
+        ORDER BY rsb.room_id ASC
+    </select>
+
+    <insert id="upsertClosedBlock">
+        INSERT INTO room_status_block (
+            block_id,
+            camp_id,
+            poi_id,
+            biz_date,
+            room_category_id,
+            room_id,
+            reason,
+            status,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+            is_deleted
+        ) VALUES (
+            #{blockId},
+            #{campId},
+            #{poiId},
+            #{bizDate},
+            #{roomCategoryId},
+            #{roomId},
+            #{reason},
+            'closed',
+            NOW(),
+            NOW(),
+            #{userId},
+            #{userId},
+            0
+        )
+        ON DUPLICATE KEY UPDATE
+            reason = VALUES(reason),
+            status = 'closed',
+            is_deleted = 0,
+            updated_at = NOW(),
+            updated_by = VALUES(updated_by)
+    </insert>
+
+    <insert id="upsertCentralSaleStatusClosedBlock">
+        INSERT INTO room_status_block (
+            block_id,
+            camp_id,
+            poi_id,
+            biz_date,
+            room_category_id,
+            room_id,
+            reason,
+            status,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+            is_deleted
+        ) VALUES (
+            #{blockId},
+            #{campId},
+            #{poiId},
+            #{bizDate},
+            #{roomCategoryId},
+            #{roomId},
+            #{reason},
+            'closed',
+            NOW(),
+            NOW(),
+            #{userId},
+            #{userId},
+            0
+        )
+        ON DUPLICATE KEY UPDATE
+            reason = CASE
+                WHEN status != 'closed' OR is_deleted = 1 OR reason = VALUES(reason) THEN VALUES(reason)
+                ELSE reason
+            END,
+            status = CASE
+                WHEN status != 'closed' OR is_deleted = 1 OR reason = VALUES(reason) THEN 'closed'
+                ELSE status
+            END,
+            is_deleted = CASE
+                WHEN status != 'closed' OR is_deleted = 1 OR reason = VALUES(reason) THEN 0
+                ELSE is_deleted
+            END,
+            updated_at = CASE
+                WHEN status != 'closed' OR is_deleted = 1 OR reason = VALUES(reason) THEN NOW()
+                ELSE updated_at
+            END,
+            updated_by = CASE
+                WHEN status != 'closed' OR is_deleted = 1 OR reason = VALUES(reason) THEN VALUES(updated_by)
+                ELSE updated_by
+            END
+    </insert>
+
+    <update id="updateDailyCountersForClose">
+        UPDATE room_status_daily
+        SET availability_count = CASE WHEN availability_count > 0 THEN availability_count - 1 ELSE 0 END,
+            vacant_count = CASE WHEN vacant_count > 0 THEN vacant_count - 1 ELSE 0 END,
+            close_room_count = close_room_count + 1,
+            updated_at = NOW()
+        WHERE camp_id = #{campId}
+          AND poi_id = #{poiId}
+          AND biz_date = #{bizDate}
+          AND room_category_id = #{roomCategoryId}
+    </update>
+
+    <insert id="insertDailyCountersForClose">
+        INSERT INTO room_status_daily (
+            id,
+            camp_id,
+            poi_id,
+            biz_date,
+            room_category_id,
+            availability_count,
+            open_room_count,
+            room_sale_count,
+            close_room_count,
+            user_busy_count,
+            retain_count,
+            repair_count,
+            vacant_count,
+            pre_come_count,
+            live_count,
+            pre_leave_count,
+            clean_count,
+            dirty_count
+        ) VALUES (
+            #{id},
+            #{campId},
+            #{poiId},
+            #{bizDate},
+            #{roomCategoryId},
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+        )
+    </insert>
+
+    <update id="openClosedBlock">
+        UPDATE room_status_block
+        SET status = 'open',
+            is_deleted = 1,
+            updated_at = NOW(),
+            updated_by = #{userId}
+        WHERE camp_id = #{campId}
+          AND room_id = #{roomId}
+          AND biz_date = #{bizDate}
+          AND status = 'closed'
+          AND is_deleted = 0
+    </update>
+
+    <update id="openCentralSaleStatusClosedBlock">
+        UPDATE room_status_block
+        SET status = 'open',
+            is_deleted = 1,
+            updated_at = NOW(),
+            updated_by = #{userId}
+        WHERE camp_id = #{campId}
+          AND room_id = #{roomId}
+          AND biz_date = #{bizDate}
+          AND reason = #{reason}
+          AND status = 'closed'
+          AND is_deleted = 0
+    </update>
+
+    <update id="updateDailyCountersForOpen">
+        UPDATE room_status_daily
+        SET availability_count = availability_count + 1,
+            vacant_count = vacant_count + 1,
+            close_room_count = GREATEST(close_room_count - 1, 0),
+            updated_at = NOW()
+        WHERE camp_id = #{campId}
+          AND poi_id = #{poiId}
+          AND biz_date = #{bizDate}
+          AND room_category_id = #{roomCategoryId}
+    </update>
+
+    <select id="selectBlockRows" resultType="com.jeez.zp.room.vo.RoomStatusesMonthlyBlockVO">
+        SELECT
+            CAST(rsb.room_category_id AS CHAR) AS roomCategoryId,
+            CAST(rsb.room_id AS CHAR) AS roomId,
+            DATE_FORMAT(rsb.biz_date, '%Y-%m-%d') AS date,
+            COALESCE(rsb.reason, '手动关房') AS reason
+        FROM room_status_block rsb
+        <include refid="blockFilters"/>
+        ORDER BY rsb.biz_date ASC, rsb.room_category_id ASC, rsb.room_id ASC
+    </select>
+
     <select id="selectInventoryRows" resultType="com.jeez.zp.room.vo.RoomStatusesMonthlyInventoryVO">
         SELECT
             CAST(rsd.room_category_id AS CHAR) AS roomCategoryId,
@@ -134,9 +480,21 @@
             CAST(om.room_id AS CHAR) AS roomId,
             DATE_FORMAT(om.start_at, '%Y-%m-%d') AS date,
             om.guest_name AS guestName,
-            ca.channel_name AS channelName,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '自来客') AS channelName,
             ROUND(om.total_price_cent / 100, 2) AS roomFee,
             ROUND(om.total_pay_price_cent / 100, 2) AS totalIncome,
+            om.order_type AS orderType,
+            DATE_FORMAT(om.start_at, '%Y-%m-%d %H:%i:%s') AS startAt,
+            DATE_FORMAT(om.end_at, '%Y-%m-%d %H:%i:%s') AS endAt,
+            DATE_FORMAT(om.created_at, '%Y-%m-%d %H:%i:%s') AS bookingAt,
+            DATE_FORMAT(COALESCE(om.guest_registered_at, ogs.first_guest_created_at), '%Y-%m-%d %H:%i:%s') AS guestRegisteredAt,
+            DATE_FORMAT(
+                COALESCE(
+                    om.checked_out_at,
+                    CASE WHEN om.status IN ('checked_out', 'completed') THEN om.updated_at ELSE NULL END
+                ),
+                '%Y-%m-%d %H:%i:%s'
+            ) AS checkedOutAt,
             CONCAT(DATE_FORMAT(om.start_at, '%Y-%m-%d'), '-', DATE_FORMAT(om.end_at, '%m-%d')) AS stayRange,
             om.guest_mobile AS phone,
             om.remark AS remark,
@@ -160,6 +518,13 @@
         FROM order_main om
         LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
             AND ca.camp_id = om.camp_id
+        LEFT JOIN (
+            SELECT
+                order_id,
+                MIN(created_at) AS first_guest_created_at
+            FROM order_guest
+            GROUP BY order_id
+        ) ogs ON ogs.order_id = om.order_id
         <include refid="orderFilters"/>
         ORDER BY om.start_at ASC, om.order_id ASC
         LIMIT #{offset}, #{pageSize}

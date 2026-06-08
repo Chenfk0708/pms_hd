@@ -2,10 +2,14 @@ package com.jeez.zp.platform.controller;
 
 import com.jeez.zp.platform.api.HudsonResponse;
 import com.jeez.zp.platform.api.TraceIdFactory;
+import com.jeez.zp.platform.dto.request.AiGlobalExportRequest;
+import com.jeez.zp.platform.dto.request.AiGlobalReminderActionRequest;
 import com.jeez.zp.platform.dto.request.AiGlobalReminderPageRequest;
 import com.jeez.zp.platform.dto.request.AiGlobalShopRequest;
 import com.jeez.zp.platform.security.LoginUserContext;
 import com.jeez.zp.platform.service.AiGlobalDataService;
+import com.jeez.zp.platform.vo.AiGlobalExportResponseVO;
+import com.jeez.zp.platform.vo.AiGlobalReminderActionResponseVO;
 import com.jeez.zp.platform.vo.AiGlobalReminderPageResponseVO;
 import com.jeez.zp.platform.vo.AiGlobalShopStatusVO;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +49,46 @@ public class AiGlobalDataController {
                         request.getStatus()
                 ),
                 TraceIdFactory.next("radar-config-shop-get")
+        );
+    }
+
+    @PostMapping("/globalRadar/export/create")
+    public HudsonResponse<AiGlobalExportResponseVO> createExportTask(@RequestBody AiGlobalExportRequest request) {
+        return HudsonResponse.success(
+                aiGlobalDataService.createExportTask(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getChannel(),
+                        request.getAttention(),
+                        request.getRoomKeyword()
+                ),
+                TraceIdFactory.next("global-radar-export-create")
+        );
+    }
+
+    @PostMapping("/globalRadar/strongReminder/postpone")
+    public HudsonResponse<AiGlobalReminderActionResponseVO> postponeStrongReminder(@RequestBody AiGlobalReminderActionRequest request) {
+        return HudsonResponse.success(
+                aiGlobalDataService.postponeStrongReminder(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getReminderId(),
+                        request.getOrderNo()
+                ),
+                TraceIdFactory.next("global-radar-strong-reminder-postpone")
+        );
+    }
+
+    @PostMapping("/globalRadar/strongReminder/resolve")
+    public HudsonResponse<AiGlobalReminderActionResponseVO> resolveStrongReminder(@RequestBody AiGlobalReminderActionRequest request) {
+        return HudsonResponse.success(
+                aiGlobalDataService.resolveStrongReminder(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getReminderId(),
+                        request.getOrderNo()
+                ),
+                TraceIdFactory.next("global-radar-strong-reminder-resolve")
         );
     }
 

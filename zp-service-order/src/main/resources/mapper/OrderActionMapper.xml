@@ -146,18 +146,154 @@
         )
     </insert>
 
+    <select id="countActiveRoomBySelection" resultType="int">
+        SELECT COUNT(1)
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.poi_id = #{poiId}
+          AND r.room_category_id = #{roomCategoryId}
+          AND r.room_id = #{roomId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+          AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+    </select>
+
+    <select id="countOverlappingActiveOrders" resultType="int">
+        SELECT COUNT(1)
+        FROM order_main om
+        WHERE om.camp_id = #{campId}
+          AND om.room_id = #{roomId}
+          AND om.status IN ('booked', 'checked_in')
+          AND om.is_deleted = 0
+          AND om.start_at &lt; #{endAt}
+          AND om.end_at &gt; #{startAt}
+        <if test="excludeOrderId != null">
+          AND om.order_id != #{excludeOrderId}
+        </if>
+    </select>
+
+    <select id="countOverlappingClosedRoomBlocks" resultType="int">
+        SELECT COUNT(1)
+        FROM room_status_block rsb
+        WHERE rsb.camp_id = #{campId}
+          AND rsb.room_id = #{roomId}
+          AND rsb.status = 'closed'
+          AND rsb.is_deleted = 0
+          AND rsb.biz_date &gt;= #{blockStartDate}
+          AND rsb.biz_date &lt;= #{blockEndDate}
+    </select>
+
     <select id="selectOrderForUpdate" resultType="com.jeez.zp.order.vo.OrderActionRowVO">
         SELECT
             om.order_id AS orderId,
             om.camp_id AS campId,
+            om.poi_id AS poiId,
+            om.room_category_id AS roomCategoryId,
+            om.room_id AS roomId,
             om.status AS status,
+            om.order_type AS orderType,
+            COALESCE(p.poi_name, om.poi_name_snapshot) AS poiName,
+            COALESCE(rc.name, om.room_category_name_snapshot) AS roomCategoryName,
+            COALESCE(r.room_name, om.room_name_snapshot) AS roomName,
             om.guest_name AS guestName,
-            om.guest_mobile AS guestMobile
+            om.guest_mobile AS guestMobile,
+            om.start_at AS startAt,
+            om.end_at AS endAt,
+            om.room_snapshot_json AS roomSnapshotJson,
+            om.remark AS remark,
+            om.guest_registered_at AS guestRegisteredAt,
+            om.checked_out_at AS checkedOutAt
         FROM order_main om
+        LEFT JOIN pms_poi p ON p.poi_id = om.poi_id
+            AND p.camp_id = om.camp_id
+            AND p.is_deleted = 0
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+            AND rc.camp_id = om.camp_id
+            AND rc.is_deleted = 0
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = om.camp_id
+            AND r.is_deleted = 0
         WHERE om.camp_id = #{campId}
           AND om.order_id = #{orderId}
           AND om.is_deleted = 0
         FOR UPDATE
+    </select>
+
+    <select id="selectChangeRoomOptions" resultType="com.jeez.zp.order.vo.OrderChangeRoomOptionVO">
+        SELECT
+            CAST(r.room_id AS CHAR) AS roomId,
+            r.room_name AS roomName,
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName,
+            CAST(p.poi_id AS CHAR) AS poiId,
+            p.poi_name AS poiName
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        LEFT JOIN pms_poi p ON p.poi_id = r.poi_id
+            AND p.camp_id = r.camp_id
+            AND p.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.poi_id = #{poiId}
+          AND r.room_category_id = #{roomCategoryId}
+          AND r.room_id != #{currentRoomId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+          AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+          AND NOT EXISTS (
+              SELECT 1
+              FROM order_main occupied
+              WHERE occupied.camp_id = r.camp_id
+                AND occupied.room_id = r.room_id
+                AND occupied.status IN ('booked', 'checked_in')
+                AND occupied.is_deleted = 0
+                AND occupied.order_id != #{excludeOrderId}
+                AND occupied.start_at &lt; #{endAt}
+                AND occupied.end_at &gt; #{startAt}
+          )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM room_status_block rsb
+              WHERE rsb.camp_id = r.camp_id
+                AND rsb.room_id = r.room_id
+                AND rsb.status = 'closed'
+                AND rsb.is_deleted = 0
+                AND rsb.biz_date &gt;= #{blockStartDate}
+                AND rsb.biz_date &lt;= #{blockEndDate}
+          )
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC, r.sort_no ASC, r.room_id ASC
+    </select>
+
+    <select id="selectRoomForChangeRoom" resultType="com.jeez.zp.order.vo.OrderChangeRoomOptionVO">
+        SELECT
+            CAST(r.room_id AS CHAR) AS roomId,
+            r.room_name AS roomName,
+            CAST(rc.room_category_id AS CHAR) AS roomCategoryId,
+            rc.name AS roomCategoryName,
+            CAST(p.poi_id AS CHAR) AS poiId,
+            p.poi_name AS poiName
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        LEFT JOIN pms_poi p ON p.poi_id = r.poi_id
+            AND p.camp_id = r.camp_id
+            AND p.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.poi_id = #{poiId}
+          AND r.room_category_id = #{roomCategoryId}
+          AND r.room_id = #{roomId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+          AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+        LIMIT 1
     </select>
 
     <update id="updateOrderStatus">
@@ -165,6 +301,58 @@
         SET status = #{status},
             payment_status = COALESCE(#{paymentStatus}, payment_status),
             remark = COALESCE(#{remark}, remark),
+            guest_registered_at = COALESCE(#{guestRegisteredAt}, guest_registered_at),
+            checked_out_at = COALESCE(#{checkedOutAt}, checked_out_at),
+            updated_at = NOW(),
+            updated_by = #{userId},
+            version_no = version_no + 1
+        WHERE camp_id = #{campId}
+          AND order_id = #{orderId}
+          AND is_deleted = 0
+    </update>
+
+    <update id="updateGuestRegisteredAt">
+        UPDATE order_main
+        SET guest_registered_at = #{guestRegisteredAt},
+            updated_at = NOW(),
+            updated_by = #{userId},
+            version_no = version_no + 1
+        WHERE camp_id = #{campId}
+          AND order_id = #{orderId}
+          AND is_deleted = 0
+    </update>
+
+    <select id="selectOrderTimes" resultType="com.jeez.zp.order.vo.OrderActionRowVO">
+        SELECT
+            om.order_id AS orderId,
+            om.guest_registered_at AS guestRegisteredAt,
+            om.checked_out_at AS checkedOutAt
+        FROM order_main om
+        WHERE om.order_id = #{orderId}
+          AND om.is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <update id="updateOrderRoom">
+        UPDATE order_main
+        SET room_id = #{roomId},
+            room_name_snapshot = #{roomNameSnapshot},
+            room_snapshot_json = CAST(#{roomSnapshotJson} AS JSON),
+            remark = #{remark},
+            updated_at = NOW(),
+            updated_by = #{userId},
+            version_no = version_no + 1
+        WHERE camp_id = #{campId}
+          AND order_id = #{orderId}
+          AND is_deleted = 0
+    </update>
+
+    <update id="releaseOrderInventoryAndArrangement">
+        UPDATE order_main
+        SET room_id = NULL,
+            room_name_snapshot = NULL,
+            room_snapshot_json = CAST(#{roomSnapshotJson} AS JSON),
+            remark = #{remark},
             updated_at = NOW(),
             updated_by = #{userId},
             version_no = version_no + 1

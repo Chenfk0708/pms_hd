@@ -6,4 +6,6 @@ import lombok.Data;
 public class CampIdRequest {
 
     private String campId;
+    private String storeId;
+    private String poiId;
 }

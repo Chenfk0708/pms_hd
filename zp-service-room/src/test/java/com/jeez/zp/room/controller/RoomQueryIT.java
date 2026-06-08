@@ -11,6 +11,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -217,6 +220,47 @@ class RoomQueryIT {
                 .andExpect(jsonPath("$.data.pagination.pageSize").value(20))
                 .andExpect(jsonPath("$.data.pagination.total").value(1));
     }
+
+    @Test
+    @Timeout(60)
+    void roomStatusesRoomsGet_shouldKeepOccupiedRoomsInRequestedDateRange() throws Exception {
+        insertRoomCategory(103101L, "TDD可用房过滤", 10);
+        insertFloor(103111L, "14F", 14);
+        insertRoom(103121L, 103101L, 103111L, "OCC-1401", "online", "normal", "clean", 1, 1, 0);
+        insertRoom(103122L, 103101L, 103111L, "AVL-1402", "online", "normal", "clean", 2, 1, 0);
+        insertOccupiedOrder(
+                103131L,
+                103101L,
+                103121L,
+                LocalDateTime.of(2026, 6, 10, 14, 0),
+                LocalDateTime.of(2026, 6, 11, 12, 0)
+        );
+
+        mockMvc.perform(post("/roomStatuses/rooms/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "startDate":"2026-06-10",
+                                  "days":1,
+                                  "roomCategoryIds":["103101"],
+                                  "page":1,
+                                  "pageSize":20
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.list.length()").value(1))
+                .andExpect(jsonPath("$.data.list[0].roomCategoryId").value("103101"))
+                .andExpect(jsonPath("$.data.list[0].rooms.length()").value(2))
+                .andExpect(jsonPath("$.data.list[0].rooms[0].roomId").value("103121"))
+                .andExpect(jsonPath("$.data.list[0].rooms[0].roomName").value("OCC-1401"))
+                .andExpect(jsonPath("$.data.list[0].rooms[1].roomId").value("103122"))
+                .andExpect(jsonPath("$.data.list[0].rooms[1].roomName").value("AVL-1402"));
+    }
+
     private void insertRoomCategory(long roomCategoryId, String name, int sortNo) {
         jdbcTemplate.update("""
                         INSERT INTO room_category (
@@ -348,6 +392,88 @@ class RoomQueryIT {
                 0,
                 availabilityCount,
                 0
+        );
+    }
+
+    private void insertOccupiedOrder(
+            long orderId,
+            long roomCategoryId,
+            long roomId,
+            LocalDateTime startAt,
+            LocalDateTime endAt
+    ) {
+        jdbcTemplate.update("""
+                        INSERT INTO order_main (
+                            order_id,
+                            camp_id,
+                            poi_id,
+                            room_category_id,
+                            room_id,
+                            channel_id,
+                            goods_id,
+                            order_no,
+                            out_order_no,
+                            order_type,
+                            status,
+                            guest_name,
+                            guest_mobile,
+                            start_at,
+                            end_at,
+                            day_num,
+                            total_price_cent,
+                            discount_price_cent,
+                            total_pay_price_cent,
+                            refund_price_cent,
+                            commission_price_cent,
+                            payment_fee_cent,
+                            platform_service_fee_cent,
+                            distribution_commission_cent,
+                            settlement_amount_cent,
+                            payment_status,
+                            payment_type_id,
+                            payment_way_id,
+                            source_type,
+                            remark,
+                            created_at,
+                            updated_at,
+                            created_by,
+                            updated_by,
+                            is_deleted,
+                            version_no
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?, ?, 0, 0)
+                        """,
+                orderId,
+                CAMP_ID,
+                POI_ID,
+                roomCategoryId,
+                roomId,
+                null,
+                null,
+                "ROOM-STATUS-" + orderId,
+                "ROOM-STATUS-OUT-" + orderId,
+                "daily_room",
+                "booked",
+                "Occupied Guest",
+                "13910313100",
+                Timestamp.valueOf(startAt),
+                Timestamp.valueOf(endAt),
+                1,
+                28800,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                "unpaid",
+                17101L,
+                17202L,
+                "frontdesk",
+                "occupied room filter test",
+                12001L,
+                12001L
         );
     }
 }
