@@ -10,13 +10,15 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class GatewayTrustInterceptor implements HandlerInterceptor {
 
     private static final String AUTH_LOGIN_PATH = "/auth/login";
+    private static final String AUTH_REGISTER_PATH = "/auth/register";
     private static final String USER_ID_HEADER = "X-User-Id";
     private static final String VERIFIED_HEADER = "X-Auth-Verified";
     private static final String UNAUTHORIZED_MESSAGE = "未通过网关认证";
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        if (request.getRequestURI().startsWith(AUTH_LOGIN_PATH)) {
+        String requestUri = request.getRequestURI();
+        if (requestUri.startsWith(AUTH_LOGIN_PATH) || requestUri.startsWith(AUTH_REGISTER_PATH)) {
             return true;
         }
 

@@ -203,6 +203,70 @@ class PlatformBootstrapControllerIT {
 
     @Test
     @Timeout(60)
+    void campSave_shouldRejectInvalidContactPhoneBeforePersisting() throws Exception {
+        mockMvc.perform(post("/camp/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "campName":"非法联系电话门店",
+                                  "name":"非法联系电话门店",
+                                  "phone":"12000000000",
+                                  "contactNumber":"12000000000",
+                                  "cityName":"深圳市",
+                                  "address":"深圳市南山区联调路 88 号"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("联系电话格式不正确"));
+
+        org.junit.jupiter.api.Assertions.assertEquals("路客云演示门店", jdbcTemplate.queryForObject("""
+                SELECT poi_name
+                FROM pms_poi
+                WHERE poi_id = 11001
+                """, String.class));
+        org.junit.jupiter.api.Assertions.assertEquals("13800000001", jdbcTemplate.queryForObject("""
+                SELECT contact_number
+                FROM pms_poi
+                WHERE poi_id = 11001
+                """, String.class));
+    }
+
+    @Test
+    @Timeout(60)
+    @Transactional
+    void campSave_shouldAcceptPrefixedMainlandMobileContactPhoneBeforePersisting() throws Exception {
+        mockMvc.perform(post("/camp/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "storeId":"11001",
+                                  "campName":"前缀电话门店",
+                                  "name":"前缀电话门店",
+                                  "phone":"+86-18123941382",
+                                  "contactNumber":"+86-18123941382",
+                                  "cityName":"深圳市",
+                                  "address":"深圳市南山区联调路 88 号"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.contactNumber").value("+86-18123941382"));
+
+        org.junit.jupiter.api.Assertions.assertEquals("+86-18123941382", jdbcTemplate.queryForObject("""
+                SELECT contact_number
+                FROM pms_poi
+                WHERE poi_id = 11001
+                """, String.class));
+    }
+
+    @Test
+    @Timeout(60)
     @Transactional
     void campSave_shouldPersistPoiSpecificEditableFields() throws Exception {
         mockMvc.perform(post("/camp/save")

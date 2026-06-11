@@ -106,6 +106,51 @@ class RolePermissionMutationIT {
 
     @Test
     @Timeout(60)
+    void roleAuthorityCampUpdate_shouldPersistSelectedPermissions() throws Exception {
+        JsonNode created = createRole("权限测试-" + System.nanoTime(), "用于权限勾选测试");
+        String roleId = created.path("roleId").asText();
+
+        mockMvc.perform(post("/roleAuthority/camp/update")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "roleId":"%s",
+                                  "permissionRows":[
+                                    {"moduleId":"dashboard","moduleName":"工作台","permissions":["查看"]},
+                                    {"moduleId":"room","moduleName":"房态管理","permissions":["查看"]}
+                                  ]
+                                }
+                                """.formatted(roleId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.roleId").value(roleId))
+                .andExpect(jsonPath("$.data.permissionRows[0].moduleId").value("dashboard"))
+                .andExpect(jsonPath("$.data.permissionRows[0].permissions[0]").value("查看"))
+                .andExpect(jsonPath("$.data.permissionRows[1].moduleId").value("room"))
+                .andExpect(jsonPath("$.data.permissionRows[1].permissions[0]").value("查看"))
+                .andExpect(jsonPath("$.data.permissionRows[1].availablePermissions[0]").value("查看"))
+                .andExpect(jsonPath("$.data.permissionRows[1].availablePermissions[1]").value("操作"));
+
+        mockMvc.perform(post("/roleAuthority/camp/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campId":"10001","roleId":"%s"}
+                                """.formatted(roleId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.permissionRows[0].permissions[0]").value("查看"))
+                .andExpect(jsonPath("$.data.permissionRows[1].moduleId").value("room"))
+                .andExpect(jsonPath("$.data.permissionRows[1].permissions[0]").value("查看"))
+                .andExpect(jsonPath("$.data.permissionRows[1].permissions.length()").value(1));
+    }
+
+    @Test
+    @Timeout(60)
     void roleCampDelete_shouldRemoveCustomRole() throws Exception {
         JsonNode created = createRole("值班前台-" + System.nanoTime(), "待删除角色");
         String roleId = created.path("roleId").asText();

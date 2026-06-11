@@ -6,9 +6,13 @@ import lombok.Data;
 public class CurrentUserBundleVO {
 
     private Long userId;
+    private String username;
     private String mobile;
     private String email;
     private String nickName;
+    private String avatarUrl;
+    private String wechat;
+    private String passwordHash;
     private Long memberId;
     private String memberName;
     private Long campId;

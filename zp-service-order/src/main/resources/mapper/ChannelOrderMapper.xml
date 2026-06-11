@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.order.mapper.ChannelOrderMapper">
+
+    <select id="selectAccount" resultType="com.jeez.zp.order.vo.ChannelOrderAccountVO">
+        SELECT
+            account_id AS accountId,
+            camp_id AS campId,
+            channel_id AS channelId,
+            channel_name AS channelName,
+            JSON_UNQUOTE(JSON_EXTRACT(config_json, '$.channelCode')) AS channelCode,
+            status AS status
+        FROM channel_account
+        WHERE account_id = #{accountId}
+        LIMIT 1
+    </select>
+
+    <select id="selectRawByExternalOrder" resultType="com.jeez.zp.order.vo.ChannelOrderRawVO">
+        SELECT
+            raw_id AS rawId,
+            account_id AS accountId,
+            out_order_no AS outOrderNo,
+            pms_order_id AS pmsOrderId,
+            import_status AS importStatus,
+            raw_payload AS rawPayload
+        FROM channel_order_raw
+        WHERE account_id = #{accountId}
+          AND out_order_no = #{outOrderNo}
+        LIMIT 1
+    </select>
+
+    <select id="selectMapping" resultType="com.jeez.zp.order.vo.ChannelOrderMappingVO">
+        SELECT
+            ca.account_id AS accountId,
+            ca.camp_id AS campId,
+            ca.channel_id AS channelId,
+            ca.channel_name AS channelName,
+            pr.poi_id AS poiId,
+            poi.poi_name AS poiName,
+            rr.room_category_id AS roomCategoryId,
+            rc.name AS roomCategoryName
+        FROM channel_account ca
+        JOIN channel_poi_rel pr ON pr.account_id = ca.account_id
+            AND pr.out_poi_id = #{outPoiId}
+        JOIN channel_room_category_rel rr ON rr.account_id = ca.account_id
+            AND rr.out_room_category_id = #{outRoomCategoryId}
+        JOIN pms_poi poi ON poi.poi_id = pr.poi_id
+            AND poi.camp_id = ca.camp_id
+            AND poi.is_deleted = 0
+        JOIN room_category rc ON rc.room_category_id = rr.room_category_id
+            AND rc.camp_id = ca.camp_id
+            AND rc.poi_id = pr.poi_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE ca.account_id = #{accountId}
+          AND ca.status = 'authorized'
+        LIMIT 1
+    </select>
+
+    <select id="selectMappingsByRoomCategoryName" resultType="com.jeez.zp.order.vo.ChannelOrderMappingVO">
+        SELECT
+            ca.account_id AS accountId,
+            ca.camp_id AS campId,
+            ca.channel_id AS channelId,
+            ca.channel_name AS channelName,
+            pr.poi_id AS poiId,
+            poi.poi_name AS poiName,
+            rr.room_category_id AS roomCategoryId,
+            rc.name AS roomCategoryName
+        FROM channel_account ca
+        JOIN channel_poi_rel pr ON pr.account_id = ca.account_id
+            AND pr.out_poi_id = #{outPoiId}
+        JOIN channel_room_category_rel rr ON rr.account_id = ca.account_id
+        JOIN pms_poi poi ON poi.poi_id = pr.poi_id
+            AND poi.camp_id = ca.camp_id
+            AND poi.is_deleted = 0
+        JOIN room_category rc ON rc.room_category_id = rr.room_category_id
+            AND rc.camp_id = ca.camp_id
+            AND rc.poi_id = pr.poi_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+            AND (rc.name = #{roomCategoryName} OR rc.display_name = #{roomCategoryName})
+        WHERE ca.account_id = #{accountId}
+          AND ca.status = 'authorized'
+        LIMIT 2
+    </select>
+
+    <select id="countAvailableRoomCategoryStock" resultType="int">
+        SELECT GREATEST(
+            (
+                SELECT COUNT(DISTINCT r.room_id)
+                FROM room r
+                JOIN room_category rc ON rc.room_category_id = r.room_category_id
+                    AND rc.camp_id = r.camp_id
+                    AND rc.status = 1
+                    AND rc.is_deleted = 0
+                WHERE r.camp_id = #{campId}
+                  AND r.poi_id = #{poiId}
+                  AND r.room_category_id = #{roomCategoryId}
+                  AND r.status = 1
+                  AND r.is_deleted = 0
+                  AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM order_main assigned_order
+                      WHERE assigned_order.camp_id = r.camp_id
+                        AND assigned_order.room_id = r.room_id
+                        AND assigned_order.status IN ('booked', 'checked_in', 'pending', 'refunding', 'no_show')
+                        AND assigned_order.is_deleted = 0
+                        <if test="excludeOrderId != null">
+                          AND assigned_order.order_id != #{excludeOrderId}
+                        </if>
+                        AND assigned_order.start_at &lt; #{endAt}
+                        AND assigned_order.end_at &gt; #{startAt}
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM room_status_block rsb
+                      WHERE rsb.camp_id = r.camp_id
+                        AND rsb.room_id = r.room_id
+                        AND rsb.status = 'closed'
+                        AND rsb.is_deleted = 0
+                        AND rsb.biz_date &gt;= #{blockStartDate}
+                        AND rsb.biz_date &lt;= #{blockEndDate}
+                  )
+            )
+            -
+            (
+                SELECT COUNT(1)
+                FROM order_main unassigned_order
+                WHERE unassigned_order.camp_id = #{campId}
+                  AND unassigned_order.poi_id = #{poiId}
+                  AND unassigned_order.room_category_id = #{roomCategoryId}
+                  AND unassigned_order.room_id IS NULL
+                  AND unassigned_order.source_type = 'channel'
+                  AND unassigned_order.status IN ('booked', 'checked_in')
+                  AND unassigned_order.is_deleted = 0
+                  <if test="excludeOrderId != null">
+                    AND unassigned_order.order_id != #{excludeOrderId}
+                  </if>
+                  AND unassigned_order.start_at &lt; #{endAt}
+                  AND unassigned_order.end_at &gt; #{startAt}
+            ),
+            0
+        )
+    </select>
+
+    <select id="selectAvailableRoomForAutoArrange" resultType="com.jeez.zp.order.vo.ChannelOrderAvailableRoomVO">
+        SELECT
+            r.room_id AS roomId,
+            r.room_name AS roomName
+        FROM room r
+        JOIN room_category rc ON rc.room_category_id = r.room_category_id
+            AND rc.camp_id = r.camp_id
+            AND rc.status = 1
+            AND rc.is_deleted = 0
+        WHERE r.camp_id = #{campId}
+          AND r.poi_id = #{poiId}
+          AND r.room_category_id = #{roomCategoryId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+          AND (r.lock_status IS NULL OR r.lock_status != 'offline')
+          AND NOT EXISTS (
+              SELECT 1
+              FROM order_main assigned_order
+              WHERE assigned_order.camp_id = r.camp_id
+                AND assigned_order.room_id = r.room_id
+                AND assigned_order.status IN ('booked', 'checked_in', 'pending', 'refunding', 'no_show')
+                AND assigned_order.is_deleted = 0
+                <if test="excludeOrderId != null">
+                  AND assigned_order.order_id != #{excludeOrderId}
+                </if>
+                AND assigned_order.start_at &lt; #{endAt}
+                AND assigned_order.end_at &gt; #{startAt}
+          )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM room_status_block rsb
+              WHERE rsb.camp_id = r.camp_id
+                AND rsb.room_id = r.room_id
+                AND rsb.status = 'closed'
+                AND rsb.is_deleted = 0
+                AND rsb.biz_date &gt;= #{blockStartDate}
+                AND rsb.biz_date &lt;= #{blockEndDate}
+          )
+        ORDER BY rc.sort_no ASC, rc.room_category_id ASC, r.sort_no ASC, r.room_id ASC
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <insert id="upsertRawProcessing">
+        INSERT INTO channel_order_raw (
+            raw_id,
+            camp_id,
+            account_id,
+            channel_id,
+            channel_code,
+            out_order_no,
+            pms_order_id,
+            import_status,
+            raw_payload,
+            error_message,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{rawId},
+            #{campId},
+            #{accountId},
+            #{channelId},
+            #{channelCode},
+            #{outOrderNo},
+            NULL,
+            'processing',
+            CAST(#{rawPayloadJson} AS JSON),
+            NULL,
+            NOW(),
+            NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            channel_code = VALUES(channel_code),
+            raw_payload = VALUES(raw_payload),
+            import_status = 'processing',
+            error_message = NULL,
+            updated_at = NOW()
+    </insert>
+
+    <update id="updateRawSuccess">
+        UPDATE channel_order_raw
+        SET pms_order_id = #{pmsOrderId},
+            import_status = 'success',
+            raw_payload = CAST(#{rawPayloadJson} AS JSON),
+            error_message = NULL,
+            updated_at = NOW()
+        WHERE account_id = #{accountId}
+          AND out_order_no = #{outOrderNo}
+    </update>
+
+    <update id="updateRawFailure">
+        UPDATE channel_order_raw
+        SET import_status = 'failed',
+            raw_payload = CAST(#{rawPayloadJson} AS JSON),
+            error_message = #{errorMessage},
+            updated_at = NOW()
+        WHERE account_id = #{accountId}
+          AND out_order_no = #{outOrderNo}
+    </update>
+
+    <insert id="insertOrderMain">
+        INSERT INTO order_main (
+            order_id,
+            camp_id,
+            poi_id,
+            room_category_id,
+            room_id,
+            channel_id,
+            goods_id,
+            order_no,
+            out_order_no,
+            order_type,
+            status,
+            guest_name,
+            guest_mobile,
+            start_at,
+            end_at,
+            day_num,
+            total_price_cent,
+            discount_price_cent,
+            total_pay_price_cent,
+            refund_price_cent,
+            commission_price_cent,
+            payment_fee_cent,
+            platform_service_fee_cent,
+            distribution_commission_cent,
+            settlement_amount_cent,
+            payment_status,
+            payment_type_id,
+            payment_way_id,
+            source_type,
+            poi_name_snapshot,
+            room_category_name_snapshot,
+            room_name_snapshot,
+            stay_type_snapshot,
+            source_label_snapshot,
+            channel_order_no_snapshot,
+            room_snapshot_json,
+            remark,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+            is_deleted,
+            version_no
+        ) VALUES (
+            #{orderId},
+            #{campId},
+            #{poiId},
+            #{roomCategoryId},
+            #{roomId},
+            #{channelAccountId},
+            NULL,
+            #{orderNo},
+            #{internalOutOrderNo},
+            'daily_room',
+            'booked',
+            #{guestName},
+            #{guestMobile},
+            #{startAt},
+            #{endAt},
+            #{dayNum},
+            #{totalPriceCent},
+            0,
+            #{totalPayPriceCent},
+            0,
+            #{commissionPriceCent},
+            0,
+            0,
+            #{commissionPriceCent},
+            #{totalPayPriceCent},
+            #{paymentStatus},
+            17101,
+            17206,
+            'channel',
+            #{poiNameSnapshot},
+            #{roomCategoryNameSnapshot},
+            #{roomNameSnapshot},
+            'daily_room',
+            #{sourceLabelSnapshot},
+            #{externalOutOrderNo},
+            CAST(#{roomSnapshotJson} AS JSON),
+            #{remark},
+            NOW(),
+            NOW(),
+            #{userId},
+            #{userId},
+            0,
+            0
+        )
+    </insert>
+
+    <insert id="insertDistributionOrder">
+        INSERT INTO distribution_order (
+            distribution_order_id,
+            camp_id,
+            source_order_id,
+            channel_id,
+            commission_price_cent,
+            settlement_status,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{distributionOrderId},
+            #{campId},
+            #{orderId},
+            #{channelAccountId},
+            #{commissionPriceCent},
+            'pending',
+            NOW(),
+            NOW()
+        )
+    </insert>
+</mapper>

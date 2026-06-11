@@ -83,6 +83,25 @@
         ORDER BY ad.seq_no ASC, ad.authority_id ASC
     </select>
 
+    <select id="selectPermissionOptions" resultType="com.jeez.zp.platform.vo.RolePermissionOptionVO">
+        SELECT
+            ad.authority_id AS authorityId,
+            ad.authority_type AS authorityType,
+            SUBSTRING_INDEX(ad.authority_code, ':', 1) AS moduleId,
+            ad.module_name AS moduleName,
+            CASE
+                WHEN ad.authority_code LIKE '%:view' THEN '&#26597;&#30475;'
+                WHEN ad.authority_code LIKE '%:edit' THEN '&#25805;&#20316;'
+                WHEN ad.authority_code LIKE '%:config' THEN '&#37197;&#32622;'
+                WHEN ad.authority_code LIKE '%:dispatch' THEN '&#27966;&#21333;'
+                ELSE ad.authority_name
+            END AS permissionLabel,
+            ad.seq_no AS seqNo
+        FROM authority_dict ad
+        WHERE ad.status = 1
+        ORDER BY ad.seq_no ASC, ad.authority_id ASC
+    </select>
+
     <select id="selectCampEmployees" resultType="com.jeez.zp.platform.vo.CampEmployeeOptionVO">
         SELECT
             CAST(COALESCE(m.user_id, m.member_id) AS CHAR) AS userId,

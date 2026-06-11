@@ -201,6 +201,10 @@
             COALESCE(r.room_name, om.room_name_snapshot) AS roomName,
             om.guest_name AS guestName,
             om.guest_mobile AS guestMobile,
+            om.total_price_cent AS totalPriceCent,
+            om.total_pay_price_cent AS totalPayPriceCent,
+            om.commission_price_cent AS commissionPriceCent,
+            om.payment_status AS paymentStatus,
             om.start_at AS startAt,
             om.end_at AS endAt,
             om.room_snapshot_json AS roomSnapshotJson,
@@ -321,6 +325,12 @@
           AND order_id = #{orderId}
           AND is_deleted = 0
     </update>
+
+    <select id="countOrderGuests" resultType="int">
+        SELECT COUNT(1)
+        FROM order_guest
+        WHERE order_id = #{orderId}
+    </select>
 
     <select id="selectOrderTimes" resultType="com.jeez.zp.order.vo.OrderActionRowVO">
         SELECT

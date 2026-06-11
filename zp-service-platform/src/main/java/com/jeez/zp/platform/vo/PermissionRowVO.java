@@ -14,4 +14,9 @@ public class PermissionRowVO {
     private String moduleId;
     private String moduleName;
     private List<String> permissions;
+    private List<String> availablePermissions;
+
+    public PermissionRowVO(String moduleId, String moduleName, List<String> permissions) {
+        this(moduleId, moduleName, permissions, permissions);
+    }
 }

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jeez.common.utils.InputValidationUtils;
 import com.jeez.zp.platform.dto.request.CampSaveRequest;
 import com.jeez.zp.platform.dto.request.VersionSubscriptionOrderSubmitRequest;
 import com.jeez.zp.platform.entity.PmsCamp;
@@ -170,6 +171,10 @@ public class PlatformBootstrapServiceImpl implements PlatformBootstrapService {
         List<String> tags = normalizeTags(request.getTags());
         String tagsJson = serializeConfigValue(tags);
         LocalDateTime now = LocalDateTime.now();
+
+        if (!InputValidationUtils.isValidOptionalContactPhone(contactNumber)) {
+            throw new BusinessException(40001, "联系电话格式不正确");
+        }
 
         String requestedPoiRef = firstText(request.getPoiId(), request.getStoreId());
         Long requestedPoiId = parseOptionalLong(requestedPoiRef);

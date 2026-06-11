@@ -402,7 +402,7 @@ public class OrderQueryServiceImpl implements OrderQueryService {
         String statusName = resolveWorkspaceOrderStatusName(row, today);
 
         WorkspaceOrderItemVO item = new WorkspaceOrderItemVO();
-        item.setChannelName(defaultString(row.getChannelName(), "未知渠道"));
+        item.setChannelName(defaultString(row.getChannelName(), "宿银平台"));
         item.setGuestName(defaultString(row.getGuestName(), "-"));
         item.setGuestMobile(defaultString(row.getGuestMobile(), "-"));
         item.setRoomCategoryName(defaultString(row.getRoomCategoryName(), "-"));
@@ -526,6 +526,9 @@ public class OrderQueryServiceImpl implements OrderQueryService {
         if ("cancelled".equalsIgnoreCase(status)) {
             return "已取消";
         }
+        if ("no_show".equalsIgnoreCase(status)) {
+            return "未到店";
+        }
         if ("refunding".equalsIgnoreCase(status)) {
             return "退款中";
         }
@@ -599,6 +602,9 @@ public class OrderQueryServiceImpl implements OrderQueryService {
         if (hasStatus(row, "cancelled")) {
             return 5;
         }
+        if (hasStatus(row, "no_show")) {
+            return 5;
+        }
         if (hasStatus(row, "refunded")) {
             return 9;
         }
@@ -612,7 +618,7 @@ public class OrderQueryServiceImpl implements OrderQueryService {
         if (hasStatus(row, "completed")) {
             return 3;
         }
-        if (hasStatus(row, "cancelled") || hasStatus(row, "refunded")) {
+        if (hasStatus(row, "cancelled") || hasStatus(row, "no_show") || hasStatus(row, "refunded")) {
             return 4;
         }
         return 1;
@@ -641,6 +647,9 @@ public class OrderQueryServiceImpl implements OrderQueryService {
     }
 
     private String resolveLongRentalLiveStatusName(OrderQueryRowVO row) {
+        if (hasStatus(row, "no_show")) {
+            return "未到店";
+        }
         if (isLongRentalCancelled(row)) {
             return "已取消";
         }
@@ -664,7 +673,7 @@ public class OrderQueryServiceImpl implements OrderQueryService {
     }
 
     private boolean isLongRentalCancelled(OrderQueryRowVO row) {
-        return hasStatus(row, "cancelled") || hasStatus(row, "refunded");
+        return hasStatus(row, "cancelled") || hasStatus(row, "no_show") || hasStatus(row, "refunded");
     }
 
     private int longRentalSortWeight(OrderQueryRowVO row) {

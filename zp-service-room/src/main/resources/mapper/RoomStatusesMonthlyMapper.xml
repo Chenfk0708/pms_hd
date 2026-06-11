@@ -37,6 +37,9 @@
           AND om.start_at &lt; #{endDate}
           AND om.end_at &gt; #{startDate}
           AND om.status NOT IN ('cancelled', 'canceled')
+          <if test="keyword == null or keyword == ''">
+            AND om.status NOT IN ('checked_out', 'completed')
+          </if>
           AND om.room_category_id IS NOT NULL
           AND om.room_id IS NOT NULL
         <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">

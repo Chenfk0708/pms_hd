@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jeez.common.utils.InputValidationUtils;
 import com.jeez.zp.platform.dto.request.MemberSettingDraftRequest;
 import com.jeez.zp.platform.dto.request.MemberSettingsBootstrapRequest;
 import com.jeez.zp.platform.dto.request.MemberSettingsSaveRequest;
@@ -379,13 +380,17 @@ public class MemberSettingServiceImpl implements MemberSettingService {
         if (!StringUtils.hasText(value)) {
             throw new BusinessException(40002, fieldName + " is required");
         }
-        return value.trim();
+        String normalized = value.trim();
+        if ("name".equals(fieldName) && !InputValidationUtils.isValidPersonName(normalized)) {
+            throw new BusinessException(40002, "姓名格式不正确，请输入 2-30 个中文或英文字母");
+        }
+        return normalized;
     }
 
     private String normalizePhone(String phone) {
         String normalized = normalizeRequiredText(phone, "phone");
-        if (!normalized.matches("^1\\d{10}$")) {
-            throw new BusinessException(40002, "phone is invalid");
+        if (!InputValidationUtils.isValidMainlandMobile(normalized)) {
+            throw new BusinessException(40002, "手机号格式不正确");
         }
         return normalized;
     }

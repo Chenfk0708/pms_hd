@@ -490,6 +490,40 @@ class GatewayRouteOwnershipTest {
 
     @Test
     @Timeout(60)
+    void orderRouteOwnsNoShowActions() {
+        List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
+                .collectList()
+                .block(Duration.ofSeconds(10));
+
+        assertNotNull(routes);
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String pathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        assertTrue(pathPatterns.contains("/orders/*/mark-no-show"),
+                () -> "order-service route must own mark-no-show action, actual Path predicate: " + pathPatterns);
+    }
+
+    @Test
+    @Timeout(60)
+    void orderRouteOwnsChannelOrderImport() {
+        List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
+                .collectList()
+                .block(Duration.ofSeconds(10));
+
+        assertNotNull(routes);
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String pathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        assertTrue(pathPatterns.contains("/channelOrders/import"),
+                () -> "order-service route must own channel order import, actual Path predicate: " + pathPatterns);
+    }
+
+    @Test
+    @Timeout(60)
     void crmRouteOwnsCustomerTagAndWeComAccountEndpoints() {
         List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
                 .collectList()

@@ -12,11 +12,14 @@ public class PmsUser {
 
     @TableId("user_id")
     private Long userId;
+    private String username;
     private String mobile;
     private String email;
     private String nickName;
     private String areaCode;
     private String avatarUrl;
+    private String wechat;
+    private String passwordHash;
     private Integer status;
     private LocalDateTime lastLoginAt;
     private LocalDateTime createdAt;

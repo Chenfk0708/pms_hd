@@ -148,6 +148,8 @@ public interface OrderActionMapper {
             @Param("userId") Long userId
     );
 
+    int countOrderGuests(@Param("orderId") Long orderId);
+
     int deleteOrderGuests(@Param("orderId") Long orderId);
 
     int insertOrderGuest(

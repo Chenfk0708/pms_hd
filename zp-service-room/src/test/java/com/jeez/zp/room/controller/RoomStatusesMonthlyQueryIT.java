@@ -114,6 +114,43 @@ class RoomStatusesMonthlyQueryIT {
 
     @Test
     @Timeout(60)
+    void roomStatusesOrderDetailsGet_shouldExcludeCompletedOrdersFromMonthGridUnlessSearched() throws Exception {
+        seedMonthlyScene();
+        insertCompletedOrderMainOnMonthlyRoom(104406L, "MONTHLY-COMPLETED-GUEST");
+
+        mockMvc.perform(post("/roomStatuses/orderDetails/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(monthlyPayload()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.list.length()").value(1))
+                .andExpect(jsonPath("$.data.list[0].guestName").value("月房态客人"))
+                .andExpect(jsonPath("$.data.pagination.total").value(1));
+
+        mockMvc.perform(post("/roomStatuses/orderDetails/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "startDate":"2026-05-20",
+                                  "days":3,
+                                  "roomCategoryIds":["104001"],
+                                  "queryCode":"MONTHLY-COMPLETED-GUEST"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.list.length()").value(1))
+                .andExpect(jsonPath("$.data.list[0].guestName").value("MONTHLY-COMPLETED-GUEST"))
+                .andExpect(jsonPath("$.data.list[0].liveStatusName").value("已退房"));
+    }
+
+    @Test
+    @Timeout(60)
     void roomStatusesOrderDetailsGet_shouldReturnLifecycleLogTimes() throws Exception {
         insertRoomCategory();
         insertRoom();
@@ -130,7 +167,7 @@ class RoomStatusesMonthlyQueryIT {
                                   "startDate":"2026-05-20",
                                   "days":3,
                                   "roomCategoryIds":["104001"],
-                                  "keyword":"月房态日志客人"
+                                  "queryCode":"月房态日志客人"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -160,7 +197,7 @@ class RoomStatusesMonthlyQueryIT {
                                   "startDate":"2026-05-20",
                                   "days":3,
                                   "roomCategoryIds":["104001"],
-                                  "keyword":"月房态旧日志客人"
+                                  "queryCode":"月房态旧日志客人"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -190,7 +227,7 @@ class RoomStatusesMonthlyQueryIT {
                                   "startDate":"2026-05-20",
                                   "days":3,
                                   "roomCategoryIds":["104001"],
-                                  "keyword":"月房态钟点房客人"
+                                  "queryCode":"月房态钟点房客人"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -221,7 +258,7 @@ class RoomStatusesMonthlyQueryIT {
                                   "startDate":"2026-05-20",
                                   "days":3,
                                   "roomCategoryIds":["104001"],
-                                  "keyword":"MONTHLY-SNAPSHOT-GUEST"
+                                  "queryCode":"MONTHLY-SNAPSHOT-GUEST"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -684,6 +721,87 @@ class RoomStatusesMonthlyQueryIT {
                 "有备注",
                 Timestamp.valueOf(createdAt),
                 Timestamp.valueOf(createdAt.plusMinutes(30)),
+                14001L,
+                14001L
+        );
+    }
+
+    private void insertCompletedOrderMainOnMonthlyRoom(long orderId, String guestName) {
+        LocalDate startDate = LocalDate.of(2026, 5, 21);
+        LocalDate endDate = LocalDate.of(2026, 5, 22);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 5, 20, 9, 0);
+        jdbcTemplate.update("""
+                        INSERT INTO order_main (
+                            order_id,
+                            camp_id,
+                            poi_id,
+                            room_category_id,
+                            room_id,
+                            channel_id,
+                            goods_id,
+                            order_no,
+                            out_order_no,
+                            order_type,
+                            status,
+                            guest_name,
+                            guest_mobile,
+                            start_at,
+                            end_at,
+                            day_num,
+                            total_price_cent,
+                            discount_price_cent,
+                            total_pay_price_cent,
+                            refund_price_cent,
+                            commission_price_cent,
+                            payment_fee_cent,
+                            platform_service_fee_cent,
+                            distribution_commission_cent,
+                            settlement_amount_cent,
+                            payment_status,
+                            payment_type_id,
+                            payment_way_id,
+                            source_type,
+                            remark,
+                            created_at,
+                            updated_at,
+                            created_by,
+                            updated_by,
+                            is_deleted,
+                            version_no
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+                        """,
+                orderId,
+                CAMP_ID,
+                POI_ID,
+                ROOM_CATEGORY_ID,
+                ROOM_ID,
+                CHANNEL_ACCOUNT_ID,
+                null,
+                "ORDER-MONTHLY-" + orderId,
+                "OUT-ORDER-MONTHLY-" + orderId,
+                "daily_room",
+                "completed",
+                guestName,
+                "13800138006",
+                Timestamp.valueOf(startDate.atTime(LocalTime.of(14, 0))),
+                Timestamp.valueOf(endDate.atTime(LocalTime.of(12, 0))),
+                1,
+                26800L,
+                0L,
+                26800L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                26800L,
+                "paid",
+                17101L,
+                17202L,
+                "channel",
+                "monthly completed fixture",
+                Timestamp.valueOf(createdAt),
+                Timestamp.valueOf(createdAt.plusHours(1)),
                 14001L,
                 14001L
         );

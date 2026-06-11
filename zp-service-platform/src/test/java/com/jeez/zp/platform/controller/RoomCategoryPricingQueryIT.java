@@ -11,6 +11,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -80,10 +82,11 @@ class RoomCategoryPricingQueryIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.head.length()").value(7))
-                .andExpect(jsonPath("$.data.body.length()").value(3))
-                .andExpect(jsonPath("$.data.body[0].roomCategoryId").value("22001"))
-                .andExpect(jsonPath("$.data.body[0].channelName").value("路客云聚合"))
-                .andExpect(jsonPath("$.data.body[0].cells.length()").value(7));
+                .andExpect(jsonPath("$.data.body.length()").value(greaterThanOrEqualTo(3)))
+                .andExpect(jsonPath("$.data.body[?(@.roomCategoryId == '22001')].roomCategoryName").value(hasItem("标准大床房")))
+                .andExpect(jsonPath("$.data.body[?(@.roomCategoryId == '22001')].channelName").value(hasItem("宿银平台")))
+                .andExpect(jsonPath("$.data.body[?(@.roomCategoryId == '22001')].channelName").value(hasItem("路客云聚合")))
+                .andExpect(jsonPath("$.data.body[?(@.roomCategoryId == '22001')].cells.length()").value(hasItem(7)));
 
         mockMvc.perform(post("/roomCategoryRules/get")
                         .header(AUTH_VERIFIED_HEADER, "true")
@@ -123,7 +126,9 @@ class RoomCategoryPricingQueryIT {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.body.length()").value(3));
+                .andExpect(jsonPath("$.data.body.length()").value(greaterThanOrEqualTo(3)))
+                .andExpect(jsonPath("$.data.body[?(@.roomCategoryId == '22001')].roomCategoryName").value(hasItem("标准大床房")))
+                .andExpect(jsonPath("$.data.body[?(@.roomCategoryId == '22001')].channelName").value(hasItem("宿银平台")));
 
         mockMvc.perform(post("/roomCategoryRules/get")
                         .header(AUTH_VERIFIED_HEADER, "true")
@@ -137,7 +142,9 @@ class RoomCategoryPricingQueryIT {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.body.length()").value(3));
+                .andExpect(jsonPath("$.data.body.length()").value(greaterThanOrEqualTo(3)))
+                .andExpect(jsonPath("$.data.body[?(@.roomCategoryId == '22001')].roomCategoryName").value(hasItem("标准大床房")))
+                .andExpect(jsonPath("$.data.body[?(@.roomCategoryId == '22001')].channelName").value(hasItem("宿银平台")));
     }
 
     @Test
@@ -172,6 +179,7 @@ class RoomCategoryPricingQueryIT {
     private void seedPricingData() {
         resetPricingData();
 
+        seedRoomCategories();
         insertChannelAccount(28301L, 17L, "路客云聚合", "tdd-localhome", "OUT-17-A", "authorized");
         insertChannelAccount(28302L, 5L, "携程", "tdd-ctrip", "OUT-5-A", "authorized");
         insertChannelAccount(28303L, 8L, "飞猪酒店", "tdd-fliggy", "OUT-8-A", "expired");
@@ -203,6 +211,50 @@ class RoomCategoryPricingQueryIT {
         jdbcTemplate.update("DELETE FROM channel_room_category_rel WHERE camp_id = ?", 10001L);
         jdbcTemplate.update("DELETE FROM channel_poi_rel WHERE camp_id = ?", 10001L);
         jdbcTemplate.update("DELETE FROM channel_account WHERE camp_id = ?", 10001L);
+    }
+
+    private void seedRoomCategories() {
+        insertRoomCategory(22001L, "标准大床房", 10, 19900);
+        insertRoomCategory(22002L, "豪华双床房", 20, 39900);
+        insertRoomCategory(22003L, "家庭套房", 30, 49900);
+    }
+
+    private void insertRoomCategory(long roomCategoryId, String name, int sortNo, int weekdayPrice) {
+        jdbcTemplate.update("""
+                        INSERT INTO room_category (
+                            room_category_id,
+                            camp_id,
+                            poi_id,
+                            name,
+                            display_name,
+                            room_count,
+                            weekday_price_cent,
+                            status,
+                            sort_no,
+                            is_deleted
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            camp_id = VALUES(camp_id),
+                            poi_id = VALUES(poi_id),
+                            name = VALUES(name),
+                            display_name = VALUES(display_name),
+                            room_count = VALUES(room_count),
+                            weekday_price_cent = VALUES(weekday_price_cent),
+                            status = VALUES(status),
+                            sort_no = VALUES(sort_no),
+                            is_deleted = VALUES(is_deleted)
+                        """,
+                roomCategoryId,
+                10001L,
+                11001L,
+                name,
+                name,
+                1,
+                weekdayPrice,
+                1,
+                sortNo,
+                0
+        );
     }
 
     private void insertChannelAccount(

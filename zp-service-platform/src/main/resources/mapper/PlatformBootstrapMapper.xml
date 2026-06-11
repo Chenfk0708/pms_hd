@@ -33,9 +33,13 @@
     <select id="selectCurrentUserBundle" resultType="com.jeez.zp.platform.vo.CurrentUserBundleVO">
         SELECT
             u.user_id AS userId,
+            u.username AS username,
             u.mobile AS mobile,
             u.email AS email,
             u.nick_name AS nickName,
+            u.avatar_url AS avatarUrl,
+            u.wechat AS wechat,
+            u.password_hash AS passwordHash,
             m.member_id AS memberId,
             m.name AS memberName,
             m.camp_id AS campId,
@@ -68,12 +72,16 @@
         LIMIT 1
     </select>
 
-    <select id="selectUserByMobileOrEmail" resultType="com.jeez.zp.platform.vo.CurrentUserBundleVO">
+    <select id="selectUserByAccount" resultType="com.jeez.zp.platform.vo.CurrentUserBundleVO">
         SELECT
             u.user_id AS userId,
+            u.username AS username,
             u.mobile AS mobile,
             u.email AS email,
             u.nick_name AS nickName,
+            u.avatar_url AS avatarUrl,
+            u.wechat AS wechat,
+            u.password_hash AS passwordHash,
             m.member_id AS memberId,
             m.name AS memberName,
             m.camp_id AS campId,
@@ -108,10 +116,16 @@
         WHERE u.is_deleted = 0
           AND u.status = 1
           AND (
+              <if test="username != null and username != ''">
+                  u.username = #{username}
+              </if>
+              <if test="username != null and username != '' and mobile != null and mobile != ''">
+                  OR
+              </if>
               <if test="mobile != null and mobile != ''">
                   u.mobile = #{mobile}
               </if>
-              <if test="mobile != null and mobile != '' and email != null and email != ''">
+              <if test="(username != null and username != '' or mobile != null and mobile != '') and email != null and email != ''">
                   OR
               </if>
               <if test="email != null and email != ''">
@@ -120,6 +134,128 @@
           )
         LIMIT 1
     </select>
+
+    <select id="countUsersByAccount" resultType="int">
+        SELECT COUNT(*)
+        FROM pms_user u
+        WHERE u.is_deleted = 0
+          AND (
+              <if test="username != null and username != ''">
+                  u.username = #{username}
+              </if>
+              <if test="username != null and username != '' and mobile != null and mobile != ''">
+                  OR
+              </if>
+              <if test="mobile != null and mobile != ''">
+                  u.mobile = #{mobile}
+              </if>
+              <if test="(username != null and username != '' or mobile != null and mobile != '') and email != null and email != ''">
+                  OR
+              </if>
+              <if test="email != null and email != ''">
+                  u.email = #{email}
+              </if>
+          )
+    </select>
+
+    <select id="countUsersByUsername" resultType="int">
+        SELECT COUNT(*)
+        FROM pms_user u
+        WHERE u.is_deleted = 0
+          AND u.username = #{username}
+    </select>
+
+    <select id="countUsersByMobile" resultType="int">
+        SELECT COUNT(*)
+        FROM pms_user u
+        WHERE u.is_deleted = 0
+          AND u.mobile = #{mobile}
+    </select>
+
+    <select id="countUsersByEmail" resultType="int">
+        SELECT COUNT(*)
+        FROM pms_user u
+        WHERE u.is_deleted = 0
+          AND u.email = #{email}
+    </select>
+
+    <select id="selectActiveRole" resultType="com.jeez.zp.platform.vo.RoleSummaryVO">
+        SELECT
+            r.role_id AS roleId,
+            r.role_name AS roleName,
+            COALESCE(NULLIF(r.remark, ''), r.role_name) AS description
+        FROM pms_role r
+        WHERE r.camp_id = #{campId}
+          AND r.role_id = #{roleId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectCampSummary" resultType="com.jeez.zp.platform.vo.CampSummaryVO">
+        SELECT
+            c.camp_id AS campId,
+            c.name AS name,
+            p.poi_id AS poiId,
+            p.poi_name AS poiName
+        FROM pms_camp c
+        LEFT JOIN (
+            SELECT camp_id, poi_id, poi_name
+            FROM (
+                SELECT
+                    poi.camp_id,
+                    poi.poi_id,
+                    poi.poi_name,
+                    ROW_NUMBER() OVER (PARTITION BY poi.camp_id ORDER BY poi.sort_no ASC, poi.poi_id ASC) AS row_num
+                FROM pms_poi poi
+                WHERE poi.is_deleted = 0
+                  AND poi.status = 1
+            ) ranked_poi
+            WHERE ranked_poi.row_num = 1
+        ) p ON p.camp_id = c.camp_id
+        WHERE c.camp_id = #{campId}
+          AND c.is_deleted = 0
+          AND c.status = 1
+        LIMIT 1
+    </select>
+
+    <select id="selectPublicRegisterRoles" resultType="com.jeez.zp.platform.vo.RoleSummaryVO">
+        SELECT
+            r.role_id AS roleId,
+            r.role_name AS roleName,
+            COALESCE(NULLIF(r.remark, ''), r.role_name) AS description,
+            0 AS memberCount,
+            FALSE AS canDelete,
+            DATE_FORMAT(r.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM pms_role r
+        WHERE r.camp_id = #{campId}
+          AND r.status = 1
+          AND r.is_deleted = 0
+        ORDER BY r.is_system DESC, r.role_id ASC
+    </select>
+
+    <update id="updateAccountProfile">
+        UPDATE pms_user
+        SET
+            nick_name = #{nickName},
+            email = #{email},
+            wechat = #{wechat},
+            avatar_url = #{avatarUrl}
+            <if test="passwordHash != null">
+                , password_hash = #{passwordHash}
+            </if>
+        WHERE user_id = #{userId}
+          AND is_deleted = 0
+    </update>
+
+    <update id="updateLinkedMemberProfile">
+        UPDATE pms_member
+        SET
+            name = #{name},
+            email = #{email}
+        WHERE user_id = #{userId}
+          AND is_deleted = 0
+    </update>
 
     <select id="selectAuthorityCodesByRoleId" resultType="java.lang.String">
         SELECT ad.authority_code

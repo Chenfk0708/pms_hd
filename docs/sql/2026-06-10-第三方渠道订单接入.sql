@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS channel_order_raw (
+  raw_id BIGINT UNSIGNED NOT NULL COMMENT '主键',
+  camp_id BIGINT UNSIGNED NOT NULL COMMENT '租户 ID',
+  account_id BIGINT UNSIGNED NOT NULL COMMENT '渠道账户 ID',
+  channel_id BIGINT UNSIGNED NOT NULL COMMENT '渠道 ID',
+  channel_code VARCHAR(32) NOT NULL COMMENT '渠道编码',
+  out_order_no VARCHAR(128) NOT NULL COMMENT '第三方原始订单号',
+  pms_order_id BIGINT UNSIGNED DEFAULT NULL COMMENT 'PMS 订单 ID',
+  import_status VARCHAR(32) NOT NULL DEFAULT 'processing' COMMENT '导入状态',
+  raw_payload JSON DEFAULT NULL COMMENT '第三方原始报文',
+  error_message VARCHAR(255) DEFAULT NULL COMMENT '失败原因',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (raw_id),
+  UNIQUE KEY uk_channel_order_raw_account_order (account_id, out_order_no),
+  KEY idx_channel_order_raw_pms_order (pms_order_id),
+  KEY idx_channel_order_raw_camp_status (camp_id, import_status),
+  CONSTRAINT fk_channel_order_raw_account FOREIGN KEY (account_id) REFERENCES channel_account (account_id),
+  CONSTRAINT fk_channel_order_raw_camp FOREIGN KEY (camp_id) REFERENCES pms_camp (camp_id),
+  CONSTRAINT fk_channel_order_raw_order FOREIGN KEY (pms_order_id) REFERENCES order_main (order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='渠道订单原始报文表';

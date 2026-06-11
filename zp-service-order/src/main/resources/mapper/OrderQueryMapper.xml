@@ -9,8 +9,8 @@
             CAST(om.order_id AS CHAR) AS orderId,
             om.out_order_no AS outOrderId,
             COALESCE(CAST(ca.channel_id AS CHAR), '0') AS channelId,
-            COALESCE(ca.channel_name, om.source_label_snapshot, '自来客') AS channelName,
-            COALESCE(ca.channel_name, om.source_label_snapshot, '自来客') AS orderChannelName,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '宿银平台') AS channelName,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '宿银平台') AS orderChannelName,
             om.order_type AS orderType,
             om.guest_name AS guestName,
             om.guest_mobile AS guestMobile,
@@ -76,7 +76,7 @@
     <select id="selectWorkspaceOrders" resultType="com.jeez.zp.order.vo.WorkspaceOrderListRowVO">
         SELECT
             CAST(om.order_id AS CHAR) AS orderId,
-            COALESCE(ca.channel_name, om.source_label_snapshot, '未知渠道') AS channelName,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '宿银平台') AS channelName,
             om.guest_name AS guestName,
             om.guest_mobile AS guestMobile,
             COALESCE(rc.name, om.room_category_name_snapshot) AS roomCategoryName,
@@ -119,7 +119,7 @@
             om.status AS status,
             om.payment_status AS paymentStatus,
             COALESCE(CAST(ca.channel_id AS CHAR), '0') AS channelId,
-            COALESCE(ca.channel_name, om.source_label_snapshot, '自来客') AS channelName,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '宿银平台') AS channelName,
             om.guest_name AS guestName,
             om.guest_mobile AS guestMobile,
             CAST(om.poi_id AS CHAR) AS poiId,
@@ -204,7 +204,7 @@
             COALESCE(rc.name, om.room_category_name_snapshot) AS roomCategoryName,
             COALESCE(r.room_name, om.room_name_snapshot) AS roomName,
             CAST(COALESCE(ca.channel_id, 0) AS CHAR) AS channelId,
-            COALESCE(ca.channel_name, om.source_label_snapshot, '') AS channelName,
+            COALESCE(ca.channel_name, om.source_label_snapshot, '宿银平台') AS channelName,
             om.start_at AS startAt,
             om.created_at AS createdAt
         FROM order_main om

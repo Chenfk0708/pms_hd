@@ -1,6 +1,7 @@
 package com.jeez.zp.order.service;
 
 import com.jeez.zp.order.exception.BusinessException;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,13 @@ public class OrderSensitiveDataCipher {
 
     public OrderSensitiveDataCipher(@Value("${order.security.id-card-secret:}") String secret) {
         this.secret = secret == null ? "" : secret.trim();
+    }
+
+    @PostConstruct
+    void validateSecretConfigured() {
+        if (secret.isBlank()) {
+            throw new IllegalStateException("ORDER_ID_CARD_SECRET is required for order guest id-card encryption");
+        }
     }
 
     public String encryptIdCard(String plainText) {

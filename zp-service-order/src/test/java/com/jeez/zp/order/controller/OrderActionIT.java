@@ -42,6 +42,10 @@ class OrderActionIT {
     private static final long CHANGE_ROOM_ORDER_ID = 40008L;
     private static final long CHANGE_ROOM_OCCUPIED_ORDER_ID = 40009L;
     private static final long SKIP_STOCK_ORDER_ID = 40010L;
+    private static final long INVALID_CREATE_ORDER_ID = 40011L;
+    private static final long INVALID_GUEST_ORDER_ID = 40012L;
+    private static final long NO_SHOW_ORDER_ID = 40013L;
+    private static final long FUTURE_NO_SHOW_ORDER_ID = 40014L;
 
     @Autowired
     private MockMvc mockMvc;
@@ -82,7 +86,7 @@ class OrderActionIT {
                                       "guestId":"40101",
                                       "guestName":"Action Create Guest",
                                       "guestMobile":"13940001001",
-                                      "guestIdCard":"ID40001001",
+                                      "guestIdCard":"110105199001010010",
                                       "guestType":"adult"
                                     }
                                   ]
@@ -109,7 +113,7 @@ class OrderActionIT {
                 "Action Create Guest"
         );
         var order = jdbcTemplate.queryForMap(
-                "SELECT poi_id, room_category_id, room_id FROM order_main WHERE camp_id = ? AND order_id = ?",
+                "SELECT poi_id, room_category_id, room_id, source_label_snapshot FROM order_main WHERE camp_id = ? AND order_id = ?",
                 CAMP_ID,
                 CREATE_ORDER_ID
         );
@@ -118,6 +122,7 @@ class OrderActionIT {
         assertThat(((Number) order.get("poi_id")).longValue()).isEqualTo(OrderTestCatalogFixture.POI_ID);
         assertThat(((Number) order.get("room_category_id")).longValue()).isEqualTo(OrderTestCatalogFixture.STANDARD_ROOM_CATEGORY_ID);
         assertThat(((Number) order.get("room_id")).longValue()).isEqualTo(OrderTestCatalogFixture.STANDARD_ROOM_ID);
+        assertThat(order.get("source_label_snapshot")).isEqualTo("宿银平台");
 
         mockMvc.perform(post("/orders/page/get")
                         .header(AUTH_VERIFIED_HEADER, "true")
@@ -137,6 +142,7 @@ class OrderActionIT {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.list[0].orderId").value("40001"))
+                .andExpect(jsonPath("$.data.list[0].channelName").value("宿银平台"))
                 .andExpect(jsonPath("$.data.list[0].orderDetailViews[0].roomCategoryId")
                         .value(String.valueOf(OrderTestCatalogFixture.STANDARD_ROOM_CATEGORY_ID)))
                 .andExpect(jsonPath("$.data.list[0].orderDetailViews[0].roomCategoryName")
@@ -378,6 +384,87 @@ class OrderActionIT {
 
     @Test
     @Timeout(60)
+    void ordersCreate_shouldRejectInvalidGuestNameAndMobileBeforeInsert() throws Exception {
+        ensureOrderLifecycleColumns();
+        resetOrders();
+        OrderTestCatalogFixture.ensureBaseCatalog(jdbcTemplate);
+        LocalDate tomorrow = LocalDate.now(SHANGHAI_ZONE).plusDays(1);
+
+        mockMvc.perform(post("/orders/create")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "orderId":"40011",
+                                  "campId":"10001",
+                                  "poiId":"11001",
+                                  "roomCategoryId":"22001",
+                                  "roomId":"23001",
+                                  "guestName":"1234",
+                                  "guestMobile":"12345",
+                                  "checkInDate":"%s",
+                                  "checkOutDate":"%s",
+                                  "totalPrice":28800,
+                                  "totalPayPrice":0
+                                }
+                                """.formatted(tomorrow, tomorrow.plusDays(1))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40001))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("姓名格式不正确，请输入 2-30 个中文或英文字母"));
+
+        Integer orderCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM order_main WHERE camp_id = ? AND order_id = ?",
+                Integer.class,
+                CAMP_ID,
+                INVALID_CREATE_ORDER_ID
+        );
+        assertThat(orderCount).isZero();
+    }
+
+    @Test
+    @Timeout(60)
+    void ordersGuestsSave_shouldRejectInvalidMobileAndResidentIdBeforeSaving() throws Exception {
+        ensureOrderLifecycleColumns();
+        seedBookedOrder(INVALID_GUEST_ORDER_ID, "Invalid Guest Holder");
+
+        mockMvc.perform(post("/orders/{id}/guests/save", INVALID_GUEST_ORDER_ID)
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "guests":[
+                                    {
+                                      "guestId":"40131",
+                                      "guestName":"非法证件客人",
+                                      "guestMobile":"12345",
+                                      "guestIdCardType":"居民身份证",
+                                      "guestIdCard":"P40001009",
+                                      "guestType":"adult"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40001))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("手机号格式不正确"));
+
+        assertThat(guestCount(INVALID_GUEST_ORDER_ID)).isZero();
+        Timestamp guestRegisteredAt = jdbcTemplate.queryForObject(
+                "SELECT guest_registered_at FROM order_main WHERE camp_id = ? AND order_id = ?",
+                Timestamp.class,
+                CAMP_ID,
+                INVALID_GUEST_ORDER_ID
+        );
+        assertThat(guestRegisteredAt).isNull();
+    }
+
+    @Test
+    @Timeout(60)
     void orderLifecycleActions_shouldCheckInSaveGuestsAndCheckOut() throws Exception {
         ensureOrderLifecycleColumns();
         seedBookedOrder(FLOW_ORDER_ID, "Action Flow Guest");
@@ -392,12 +479,11 @@ class OrderActionIT {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.orderId").value("40002"))
-                .andExpect(jsonPath("$.data.status").value("checked_in"))
-                .andExpect(jsonPath("$.data.message").value("办理入住成功"));
+                .andExpect(jsonPath("$.code").value(40001))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("请先登记入住人"));
 
-        assertThat(orderStatus(FLOW_ORDER_ID)).isEqualTo("checked_in");
+        assertThat(orderStatus(FLOW_ORDER_ID)).isEqualTo("booked");
 
         mockMvc.perform(post("/orders/{id}/guests/save", FLOW_ORDER_ID)
                         .header(AUTH_VERIFIED_HEADER, "true")
@@ -411,14 +497,14 @@ class OrderActionIT {
                                       "guestId":"40121",
                                       "guestName":"Action Flow Guest",
                                       "guestMobile":"13940002001",
-                                      "guestIdCard":"ID40002001",
+                                      "guestIdCard":"110105199002020026",
                                       "guestType":"adult"
                                     },
                                     {
                                       "guestId":"40122",
                                       "guestName":"Action Flow Companion",
                                       "guestMobile":"13940002002",
-                                      "guestIdCard":"ID40002002",
+                                      "guestIdCard":"110105199003030031",
                                       "guestType":"adult"
                                     }
                                   ]
@@ -445,8 +531,25 @@ class OrderActionIT {
                 FLOW_ORDER_ID,
                 "Action Flow Guest"
         );
-        assertThat(storedIdCard).isNotEqualTo("ID40002001");
+        assertThat(storedIdCard).isNotEqualTo("110105199002020026");
         assertThat(storedIdCard).startsWith("enc:v1:");
+
+        mockMvc.perform(post("/orders/{id}/check-in", FLOW_ORDER_ID)
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.orderId").value("40002"))
+                .andExpect(jsonPath("$.data.status").value("checked_in"))
+                .andExpect(jsonPath("$.data.message").value("办理入住成功"));
+
+        assertThat(orderStatus(FLOW_ORDER_ID)).isEqualTo("checked_in");
 
         mockMvc.perform(post("/orders/detail/get")
                         .header(AUTH_VERIFIED_HEADER, "true")
@@ -460,7 +563,7 @@ class OrderActionIT {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.guests[0].guestIdCard").value("ID40002001"))
+                .andExpect(jsonPath("$.data.guests[0].guestIdCard").value("110105199002020026"))
                 .andExpect(jsonPath("$.data.guests[0].guestIdCardType").value("居民身份证"));
 
         mockMvc.perform(post("/orders/{id}/check-out", FLOW_ORDER_ID)
@@ -488,6 +591,106 @@ class OrderActionIT {
         );
         assertThat(checkedOutAt).isNotNull();
         assertThat(checkedOutAt).isAfterOrEqualTo(guestRegisteredAt);
+    }
+
+    @Test
+    @Timeout(60)
+    void ordersMarkNoShow_shouldOnlyAllowOverdueBookedOrders() throws Exception {
+        ensureOrderLifecycleColumns();
+        resetOrders();
+        OrderTestCatalogFixture.ensureBaseCatalog(jdbcTemplate);
+        LocalDate yesterday = LocalDate.now(SHANGHAI_ZONE).minusDays(1);
+        LocalDate tomorrow = LocalDate.now(SHANGHAI_ZONE).plusDays(1);
+        insertOrderMain(
+                NO_SHOW_ORDER_ID,
+                "No Show Guest",
+                "13940013001",
+                yesterday,
+                yesterday.plusDays(1),
+                yesterday.atTime(8, 0)
+        );
+        insertOrderMain(
+                FUTURE_NO_SHOW_ORDER_ID,
+                "Future No Show Guest",
+                "13940014001",
+                tomorrow,
+                tomorrow.plusDays(1),
+                tomorrow.atTime(8, 0),
+                OrderTestCatalogFixture.STANDARD_ROOM_CATEGORY_ID,
+                OrderTestCatalogFixture.STANDARD_OCCUPIED_ROOM_ID,
+                OrderTestCatalogFixture.STANDARD_OCCUPIED_ROOM_NAME
+        );
+
+        mockMvc.perform(post("/orders/{id}/mark-no-show", NO_SHOW_ORDER_ID)
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "reason":"客人超过入住时间未到店"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.orderId").value("40013"))
+                .andExpect(jsonPath("$.data.status").value("no_show"))
+                .andExpect(jsonPath("$.data.message").value("已标记为未到店"));
+
+        assertThat(orderStatus(NO_SHOW_ORDER_ID)).isEqualTo("no_show");
+        String noShowRemark = jdbcTemplate.queryForObject(
+                "SELECT remark FROM order_main WHERE camp_id = ? AND order_id = ?",
+                String.class,
+                CAMP_ID,
+                NO_SHOW_ORDER_ID
+        );
+        assertThat(noShowRemark).contains("未到店原因：客人超过入住时间未到店");
+
+        mockMvc.perform(post("/orders/{id}/mark-no-show", FUTURE_NO_SHOW_ORDER_ID)
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "reason":"未来订单不能置为未到店"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40001))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("未到入住时间，不能标记未到店"));
+
+        assertThat(orderStatus(FUTURE_NO_SHOW_ORDER_ID)).isEqualTo("booked");
+    }
+
+    @Test
+    @Timeout(60)
+    void ordersMarkNoShow_shouldRejectNonBookedOrders() throws Exception {
+        ensureOrderLifecycleColumns();
+        seedBookedOrder(NO_SHOW_ORDER_ID, "Checked In No Show Guest");
+        jdbcTemplate.update(
+                "UPDATE order_main SET status = 'checked_in' WHERE camp_id = ? AND order_id = ?",
+                CAMP_ID,
+                NO_SHOW_ORDER_ID
+        );
+
+        mockMvc.perform(post("/orders/{id}/mark-no-show", NO_SHOW_ORDER_ID)
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "reason":"入住中订单不能置为未到店"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40001))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("只有待入住订单可以标记未到店"));
+
+        assertThat(orderStatus(NO_SHOW_ORDER_ID)).isEqualTo("checked_in");
     }
 
     @Test
@@ -723,11 +926,11 @@ class OrderActionIT {
     }
 
     private void resetOrders() {
-        jdbcTemplate.update("DELETE FROM order_payment_record WHERE camp_id = ? AND order_id BETWEEN 40001 AND 40010", CAMP_ID);
-        jdbcTemplate.update("DELETE FROM distribution_order WHERE camp_id = ? AND source_order_id BETWEEN 40001 AND 40010", CAMP_ID);
-        jdbcTemplate.update("DELETE FROM order_guest WHERE order_id BETWEEN 40001 AND 40010");
-        jdbcTemplate.update("DELETE FROM ledger_entry WHERE camp_id = ? AND order_id BETWEEN 40001 AND 40010", CAMP_ID);
-        jdbcTemplate.update("DELETE FROM order_main WHERE camp_id = ? AND order_id BETWEEN 40001 AND 40010", CAMP_ID);
+        jdbcTemplate.update("DELETE FROM order_payment_record WHERE camp_id = ? AND order_id BETWEEN 40001 AND 40020", CAMP_ID);
+        jdbcTemplate.update("DELETE FROM distribution_order WHERE camp_id = ? AND source_order_id BETWEEN 40001 AND 40020", CAMP_ID);
+        jdbcTemplate.update("DELETE FROM order_guest WHERE order_id BETWEEN 40001 AND 40020");
+        jdbcTemplate.update("DELETE FROM ledger_entry WHERE camp_id = ? AND order_id BETWEEN 40001 AND 40020", CAMP_ID);
+        jdbcTemplate.update("DELETE FROM order_main WHERE camp_id = ? AND order_id BETWEEN 40001 AND 40020", CAMP_ID);
     }
 
     private void ensureOrderLifecycleColumns() {

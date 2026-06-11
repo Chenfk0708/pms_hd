@@ -86,6 +86,66 @@ class CompanyControllerIT {
 
     @Test
     @Timeout(60)
+    void companyInfoSave_shouldRejectInvalidPhoneBeforePersisting() throws Exception {
+        mockMvc.perform(post("/company/info/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"%s",
+                                  "profile":{
+                                    "name":"Invalid Phone Company",
+                                    "type":"hotel",
+                                    "phone":"12000000000",
+                                    "city":"Shenzhen / Nanshan",
+                                    "address":"Test Road 1001"
+                                  }
+                                }
+                                """.formatted(CAMP_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("联系电话格式不正确"));
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM company_profile
+                WHERE camp_id = 10001
+                  AND company_name = 'Invalid Phone Company'
+                """, Integer.class)).isZero();
+    }
+
+    @Test
+    @Timeout(60)
+    void companyInfoSave_shouldAcceptPrefixedMainlandMobilePhoneBeforePersisting() throws Exception {
+        mockMvc.perform(post("/company/info/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"%s",
+                                  "profile":{
+                                    "name":"Prefixed Phone Company",
+                                    "type":"hotel",
+                                    "phone":"0086 18123941382",
+                                    "city":"Shenzhen / Nanshan",
+                                    "address":"Test Road 1001"
+                                  }
+                                }
+                                """.formatted(CAMP_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.phone").value("0086 18123941382"));
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT phone
+                FROM company_profile
+                WHERE camp_id = 10001 AND is_deleted = 0
+                """, String.class)).isEqualTo("0086 18123941382");
+    }
+
+    @Test
+    @Timeout(60)
     void companyQualificationSave_shouldPersistProfileAndLegalIdentity() throws Exception {
         mockMvc.perform(post("/company/qualification/save")
                         .header(AUTH_VERIFIED_HEADER, "true")
@@ -126,6 +186,48 @@ class CompanyControllerIT {
                 FROM company_qualification
                 WHERE camp_id = 10001 AND document_type = 'resident_id_card' AND is_deleted = 0
                 """, String.class)).isEqualTo("ID-TEST-2002");
+    }
+
+    @Test
+    @Timeout(60)
+    void companyQualificationSave_shouldRejectInvalidLegalIdentityBeforePersisting() throws Exception {
+        mockMvc.perform(post("/company/qualification/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"%s",
+                                  "profile":{
+                                    "name":"Invalid Identity Company",
+                                    "type":"homestay",
+                                    "phone":"13900000002",
+                                    "city":"Guangzhou / Tianhe",
+                                    "address":"Qualification Road 2002"
+                                  },
+                                  "legalIdentity":{
+                                    "documentType":"resident_id_card",
+                                    "documentNumber":"123"
+                                  },
+                                  "legalPersonName":"法人测试",
+                                  "legalPersonIdNumber":"123"
+                                }
+                                """.formatted(CAMP_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("居民身份证号格式不正确"));
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM company_profile
+                WHERE camp_id = 10001
+                  AND company_name = 'Invalid Identity Company'
+                """, Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM company_qualification
+                WHERE camp_id = 10001
+                  AND document_number = '123'
+                """, Integer.class)).isZero();
     }
 
     @Test

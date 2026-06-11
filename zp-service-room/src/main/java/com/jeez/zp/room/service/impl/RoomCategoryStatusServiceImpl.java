@@ -563,7 +563,7 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
         if (row.getProductName() != null && !row.getProductName().isBlank()) {
             return row.getProductName();
         }
-        return row.getRoomCategoryName() + "<鏃犳棭>";
+        return row.getRoomCategoryName() + "<无早>";
     }
 
     private long resolveBasePrice(RoomCategoryPricingRowVO row) {

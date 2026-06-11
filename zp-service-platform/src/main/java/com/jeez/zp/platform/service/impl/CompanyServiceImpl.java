@@ -2,6 +2,7 @@ package com.jeez.zp.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.jeez.common.utils.InputValidationUtils;
 import com.jeez.zp.platform.dto.request.CompanyInfoSaveRequest;
 import com.jeez.zp.platform.dto.request.CompanyProfileRequest;
 import com.jeez.zp.platform.dto.request.CompanyQualificationSaveRequest;
@@ -93,12 +94,27 @@ public class CompanyServiceImpl implements CompanyService {
     @Transactional
     public CompanyQualificationVO saveQualification(CompanyQualificationSaveRequest request, Long userId) {
         Long resolvedCampId = resolveAccessibleCampId(parseLong(request.getCampId()), userId);
-        upsertProfile(resolvedCampId, requireProfile(request.getProfile()));
+        CompanyProfileRequest profile = requireProfile(request.getProfile());
 
         String documentType = normalize(request.getLegalIdentity() == null ? null : request.getLegalIdentity().getDocumentType());
         if (!StringUtils.hasText(documentType)) {
             documentType = DEFAULT_DOCUMENT_TYPE;
         }
+        String credentialType = InputValidationUtils.normalizeCredentialType(documentType);
+        String documentNumber = normalize(request.getLegalIdentity() == null ? null : request.getLegalIdentity().getDocumentNumber());
+        if (!InputValidationUtils.isValidCredential(credentialType, documentNumber)) {
+            throw new BusinessException(40002, credentialErrorMessage(credentialType));
+        }
+        String legalPersonName = normalize(request.getLegalPersonName());
+        if (StringUtils.hasText(legalPersonName) && !InputValidationUtils.isValidPersonName(legalPersonName)) {
+            throw new BusinessException(40002, "姓名格式不正确，请输入 2-30 个中文或英文字母");
+        }
+        String legalPersonIdNumber = normalize(request.getLegalPersonIdNumber());
+        if (!InputValidationUtils.isValidCredential(credentialType, legalPersonIdNumber)) {
+            throw new BusinessException(40002, credentialErrorMessage(credentialType));
+        }
+
+        upsertProfile(resolvedCampId, profile);
 
         CompanyQualification qualification = findQualification(resolvedCampId, documentType);
         if (qualification == null) {
@@ -109,9 +125,9 @@ public class CompanyServiceImpl implements CompanyService {
             qualification.setStatus(ACTIVE_STATUS);
             qualification.setIsDeleted(NOT_DELETED);
         }
-        qualification.setDocumentNumber(normalize(request.getLegalIdentity() == null ? null : request.getLegalIdentity().getDocumentNumber()));
-        qualification.setLegalPersonName(normalize(request.getLegalPersonName()));
-        qualification.setLegalPersonIdNumber(normalize(request.getLegalPersonIdNumber()));
+        qualification.setDocumentNumber(documentNumber);
+        qualification.setLegalPersonName(legalPersonName);
+        qualification.setLegalPersonIdNumber(legalPersonIdNumber);
         if (qualification.getLegalPersonIdNumber() == null) {
             qualification.setLegalPersonIdNumber(qualification.getDocumentNumber());
         }
@@ -296,6 +312,9 @@ public class CompanyServiceImpl implements CompanyService {
         if (!StringUtils.hasText(profile.getName())) {
             throw new BusinessException(40002, "企业名称不能为空");
         }
+        if (!InputValidationUtils.isValidOptionalContactPhone(profile.getPhone())) {
+            throw new BusinessException(40002, "联系电话格式不正确");
+        }
         return profile;
     }
 
@@ -407,6 +426,10 @@ public class CompanyServiceImpl implements CompanyService {
             return value;
         }
         return firstText(fallback1, fallback2);
+    }
+
+    private String credentialErrorMessage(String credentialType) {
+        return "居民身份证".equals(credentialType) ? "居民身份证号格式不正确" : "证件号码格式不正确";
     }
 
     private String formatTime(LocalDateTime dateTime) {

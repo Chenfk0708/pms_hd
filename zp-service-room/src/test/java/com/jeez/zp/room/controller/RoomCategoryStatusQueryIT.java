@@ -114,7 +114,10 @@ class RoomCategoryStatusQueryIT {
                 .andExpect(jsonPath("$.data.roomStatusViews[0].normalPrice").value(28800))
                 .andExpect(jsonPath("$.data.roomStatusViews[0].normalActualSalePrice").value(28800))
                 .andExpect(jsonPath("$.data.roomStatusViews[0].statusViews.length()").value(3))
-                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses.length()").value(0));
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses.length()").value(1))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].channelId").value("100"))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].channelName").value("宿银平台"))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].channelRoomCategoryName").value("TDD新增无渠道绑定房型<无早>"));
     }
 
     @Test

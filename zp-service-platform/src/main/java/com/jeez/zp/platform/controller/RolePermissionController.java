@@ -3,6 +3,7 @@ package com.jeez.zp.platform.controller;
 import com.jeez.zp.platform.api.HudsonResponse;
 import com.jeez.zp.platform.api.TraceIdFactory;
 import com.jeez.zp.platform.dto.request.RoleAuthorityCampRequest;
+import com.jeez.zp.platform.dto.request.RoleAuthorityCampUpdateRequest;
 import com.jeez.zp.platform.dto.request.RoleCampCreateRequest;
 import com.jeez.zp.platform.dto.request.RoleCampDeleteRequest;
 import com.jeez.zp.platform.dto.request.RoleCampPageRequest;
@@ -58,6 +59,19 @@ public class RolePermissionController {
                         parseRequiredLong(request.getRoleId())
                 ),
                 TraceIdFactory.next("role-authority-camp-get")
+        );
+    }
+
+    @PostMapping("/roleAuthority/camp/update")
+    public HudsonResponse<RoleAuthorityDetailVO> updateRoleAuthorities(@RequestBody RoleAuthorityCampUpdateRequest request) {
+        return HudsonResponse.success(
+                rolePermissionService.updateRoleAuthorities(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        parseRequiredLong(request.getRoleId()),
+                        request.getPermissionRows()
+                ),
+                TraceIdFactory.next("role-authority-camp-update")
         );
     }
 

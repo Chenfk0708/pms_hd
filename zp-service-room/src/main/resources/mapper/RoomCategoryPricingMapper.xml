@@ -29,6 +29,34 @@
               AND rel.shelf_status = 'on_shelf'
               AND rel.audit_status = 'approved'
             GROUP BY rel.camp_id, rel.room_category_id, ca.channel_id, ca.channel_name
+            UNION ALL
+            SELECT
+                rc_default.camp_id AS camp_id,
+                rc_default.room_category_id AS room_category_id,
+                100 AS channel_id,
+                '宿银平台' AS channel_name,
+                0 AS sort_account_id
+            FROM room_category rc_default
+            WHERE rc_default.status = 1
+              AND rc_default.is_deleted = 0
+            <if test="channelIds != null and channelIds.size() > 0">
+              AND 100 IN
+              <foreach collection="channelIds" item="channelId" open="(" separator="," close=")">
+                  #{channelId}
+              </foreach>
+            </if>
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM channel_room_category_rel rel_default
+                  JOIN channel_account ca_default ON ca_default.account_id = rel_default.account_id
+                      AND ca_default.camp_id = rel_default.camp_id
+                  WHERE rel_default.camp_id = rc_default.camp_id
+                    AND rel_default.room_category_id = rc_default.room_category_id
+                    AND ca_default.channel_id = 100
+                    AND ca_default.status = 'authorized'
+                    AND rel_default.shelf_status = 'on_shelf'
+                    AND rel_default.audit_status = 'approved'
+              )
         ) ch ON ch.camp_id = rc.camp_id
             AND ch.room_category_id = rc.room_category_id
         LEFT JOIN (

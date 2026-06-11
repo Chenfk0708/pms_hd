@@ -150,6 +150,7 @@ class RoomCategoryStatusQueryIT {
     private void seedRoomCategoryStatuses() {
         resetRoomCategoryStatuses();
 
+        seedRoomCategories();
         insertChannelAccount(38301L, 17L, "路客云聚合", "tdd-localhome", "OUT-17-A", "authorized");
         insertChannelAccount(38302L, 5L, "携程", "tdd-ctrip", "OUT-5-A", "authorized");
 
@@ -178,6 +179,49 @@ class RoomCategoryStatusQueryIT {
         jdbcTemplate.update("DELETE FROM channel_room_category_rel WHERE camp_id = ?", CAMP_ID);
         jdbcTemplate.update("DELETE FROM channel_poi_rel WHERE camp_id = ?", CAMP_ID);
         jdbcTemplate.update("DELETE FROM channel_account WHERE camp_id = ?", CAMP_ID);
+    }
+
+    private void seedRoomCategories() {
+        insertRoomCategory(22001L, "标准大床房", 10, 5, 19900);
+        insertRoomCategory(22002L, "豪华双床房", 20, 5, 39900);
+    }
+
+    private void insertRoomCategory(long roomCategoryId, String name, int sortNo, int roomCount, int weekdayPrice) {
+        jdbcTemplate.update("""
+                        INSERT INTO room_category (
+                            room_category_id,
+                            camp_id,
+                            poi_id,
+                            name,
+                            display_name,
+                            room_count,
+                            weekday_price_cent,
+                            status,
+                            sort_no,
+                            is_deleted
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            camp_id = VALUES(camp_id),
+                            poi_id = VALUES(poi_id),
+                            name = VALUES(name),
+                            display_name = VALUES(display_name),
+                            room_count = VALUES(room_count),
+                            weekday_price_cent = VALUES(weekday_price_cent),
+                            status = VALUES(status),
+                            sort_no = VALUES(sort_no),
+                            is_deleted = VALUES(is_deleted)
+                        """,
+                roomCategoryId,
+                CAMP_ID,
+                11001L,
+                name,
+                name,
+                roomCount,
+                weekdayPrice,
+                1,
+                sortNo,
+                0
+        );
     }
 
     private void insertChannelAccount(

@@ -13,6 +13,8 @@ public interface OrderActionService {
 
     OrderActionResponseVO skipStock(Long campId, Long orderId, Long userId, String reason);
 
+    OrderActionResponseVO markNoShow(Long campId, Long orderId, Long userId, String reason);
+
     OrderActionResponseVO checkIn(Long campId, Long orderId, Long userId);
 
     OrderActionResponseVO checkOut(Long campId, Long orderId, Long userId);

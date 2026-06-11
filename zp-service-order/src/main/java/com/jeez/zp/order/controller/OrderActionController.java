@@ -46,6 +46,14 @@ public class OrderActionController {
         );
     }
 
+    @PostMapping("/orders/{id}/mark-no-show")
+    public HudsonResponse<OrderActionResponseVO> markNoShow(@PathVariable("id") Long orderId, @RequestBody OrderActionRequest request) {
+        return HudsonResponse.success(
+                orderActionService.markNoShow(parseLong(request.getCampId()), orderId, LoginUserContext.requiredUserId(), request.getReason()),
+                TraceIdFactory.next("orders-mark-no-show")
+        );
+    }
+
     @PostMapping("/orders/{id}/check-in")
     public HudsonResponse<OrderActionResponseVO> checkIn(@PathVariable("id") Long orderId, @RequestBody OrderActionRequest request) {
         return HudsonResponse.success(

@@ -1,5 +1,6 @@
 package com.jeez.zp.crm.service.impl;
 
+import com.jeez.common.utils.InputValidationUtils;
 import com.jeez.zp.crm.dto.request.CustomerPageRequest;
 import com.jeez.zp.crm.dto.request.CustomerSaveRequest;
 import com.jeez.zp.crm.exception.BusinessException;
@@ -63,8 +64,8 @@ public class CustomerServiceImpl implements CustomerService {
         customerMapper.upsertCustomer(
                 customerId,
                 campId,
-                requireText(request.getName(), "name"),
-                request.getMobile(),
+                requirePersonName(request.getName()),
+                requireMobile(request.getMobile()),
                 defaultString(request.getProfileJson(), "{}")
         );
 
@@ -106,6 +107,22 @@ public class CustomerServiceImpl implements CustomerService {
         String normalized = trimToNull(value);
         if (normalized == null) {
             throw new BusinessException(40001, fieldName + " is required");
+        }
+        return normalized;
+    }
+
+    private String requirePersonName(String value) {
+        String normalized = requireText(value, "name");
+        if (!InputValidationUtils.isValidPersonName(normalized)) {
+            throw new BusinessException(40001, "姓名格式不正确，请输入 2-30 个中文或英文字母");
+        }
+        return normalized;
+    }
+
+    private String requireMobile(String value) {
+        String normalized = requireText(value, "mobile");
+        if (!InputValidationUtils.isValidMainlandMobile(normalized)) {
+            throw new BusinessException(40001, "手机号格式不正确");
         }
         return normalized;
     }

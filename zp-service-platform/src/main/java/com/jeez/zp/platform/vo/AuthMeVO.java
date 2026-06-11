@@ -10,9 +10,13 @@ import java.util.List;
 public class AuthMeVO {
 
     Long userId;
+    String username;
     String mobile;
     String email;
     String nickName;
+    String avatarUrl;
+    String wechat;
+    Boolean passwordSet;
     Long memberId;
     String memberName;
     Long campId;
@@ -27,9 +31,13 @@ public class AuthMeVO {
     public static AuthMeVO from(CurrentUserBundleVO bundle, List<String> permissionCodes) {
         return AuthMeVO.builder()
                 .userId(bundle.getUserId())
+                .username(bundle.getUsername())
                 .mobile(bundle.getMobile())
                 .email(bundle.getEmail())
                 .nickName(bundle.getNickName())
+                .avatarUrl(bundle.getAvatarUrl())
+                .wechat(bundle.getWechat())
+                .passwordSet(bundle.getPasswordHash() != null && !bundle.getPasswordHash().isBlank())
                 .memberId(bundle.getMemberId())
                 .memberName(bundle.getMemberName())
                 .campId(bundle.getCampId())

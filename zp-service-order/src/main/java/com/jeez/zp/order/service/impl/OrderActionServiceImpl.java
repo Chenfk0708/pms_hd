@@ -2,6 +2,7 @@ package com.jeez.zp.order.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jeez.common.utils.InputValidationUtils;
 import com.jeez.zp.order.dto.request.OrderCreateRequest;
 import com.jeez.zp.order.dto.request.OrderCreateRoomItemRequest;
 import com.jeez.zp.order.dto.request.OrderGuestSaveItemRequest;
@@ -35,6 +36,8 @@ public class OrderActionServiceImpl implements OrderActionService {
     private static final String STATUS_CHECKED_IN = "checked_in";
     private static final String STATUS_COMPLETED = "completed";
     private static final String STATUS_CANCELLED = "cancelled";
+    private static final String STATUS_NO_SHOW = "no_show";
+    private static final String DEFAULT_LOCAL_CHANNEL_NAME = "宿银平台";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final OrderActionMapper orderActionMapper;
@@ -62,7 +65,10 @@ public class OrderActionServiceImpl implements OrderActionService {
         String orderType = normalizeOrderType(request.getOrderType(), request.getStayType());
         validateRoomSelection(campId, poiId, roomCategoryId, roomId, startAt, endAt, orderId, orderType);
         List<OrderCreateRoomItemRequest> normalizedRooms = normalizeRoomSnapshots(request.getRooms(), roomCategoryId, roomId);
-        String sourceLabel = defaultString(request.getSourceLabel(), "自来客");
+        String sourceLabel = defaultString(request.getSourceLabel(), DEFAULT_LOCAL_CHANNEL_NAME);
+        String guestName = normalizePersonName(request.getGuestName());
+        String guestMobile = normalizeOptionalMainlandMobile(request.getGuestMobile());
+        List<OrderGuestSaveItemRequest> normalizedGuests = normalizeGuests(request.getGuests());
 
         orderActionMapper.insertOrderMain(
                 orderId,
@@ -73,8 +79,8 @@ public class OrderActionServiceImpl implements OrderActionService {
                 orderType,
                 "ORDER-ACTION-" + orderId,
                 defaultString(request.getChannelOrderNo(), "OUT-ACTION-" + orderId),
-                requireText(request.getGuestName(), "guestName"),
-                request.getGuestMobile(),
+                guestName,
+                guestMobile,
                 startAt,
                 endAt,
                 resolveDayNum(orderType, startAt, endAt),
@@ -120,8 +126,8 @@ public class OrderActionServiceImpl implements OrderActionService {
                 request.getRemark(),
                 userId
         );
-        replaceGuests(orderId, request.getGuests());
-        return response(orderId, STATUS_BOOKED, request.getGuests() == null ? 0 : request.getGuests().size(), "订单创建成功");
+        replaceGuests(orderId, normalizedGuests);
+        return response(orderId, STATUS_BOOKED, normalizedGuests.size(), "订单创建成功");
     }
 
     @Override
@@ -168,11 +174,31 @@ public class OrderActionServiceImpl implements OrderActionService {
 
     @Override
     @Transactional
+    public OrderActionResponseVO markNoShow(Long campId, Long orderId, Long userId, String reason) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        OrderActionRowVO row = requireOrder(resolvedCampId, orderId);
+        if (!STATUS_BOOKED.equals(row.getStatus())) {
+            throw new BusinessException(40001, "只有待入住订单可以标记未到店");
+        }
+        if (row.getStartAt() == null || LocalDateTime.now().isBefore(row.getStartAt())) {
+            throw new BusinessException(40001, "未到入住时间，不能标记未到店");
+        }
+
+        String remark = appendNoShowRemark(row.getRemark(), reason);
+        updateStatus(resolvedCampId, orderId, STATUS_NO_SHOW, null, remark, null, null, userId);
+        return response(orderId, STATUS_NO_SHOW, null, "已标记为未到店");
+    }
+
+    @Override
+    @Transactional
     public OrderActionResponseVO checkIn(Long campId, Long orderId, Long userId) {
         Long resolvedCampId = resolveAccessibleCampId(campId, userId);
         OrderActionRowVO row = requireOrder(resolvedCampId, orderId);
         if (!STATUS_BOOKED.equals(row.getStatus())) {
             throw new BusinessException(40001, "only booked order can check in");
+        }
+        if (row.getGuestRegisteredAt() == null || orderActionMapper.countOrderGuests(orderId) <= 0) {
+            throw new BusinessException(40001, "请先登记入住人");
         }
         updateStatus(resolvedCampId, orderId, STATUS_CHECKED_IN, null, null, null, null, userId);
         return response(orderId, STATUS_CHECKED_IN, null, "办理入住成功");
@@ -197,13 +223,14 @@ public class OrderActionServiceImpl implements OrderActionService {
         Long resolvedCampId = resolveAccessibleCampId(campId, userId);
         requireOrder(resolvedCampId, orderId);
         List<OrderGuestSaveItemRequest> guests = request == null ? List.of() : request.getGuests();
-        replaceGuests(orderId, guests);
+        List<OrderGuestSaveItemRequest> normalizedGuests = normalizeGuests(guests);
+        replaceGuests(orderId, normalizedGuests);
         LocalDateTime guestRegisteredAt = LocalDateTime.now();
         int updated = orderActionMapper.updateGuestRegisteredAt(resolvedCampId, orderId, guestRegisteredAt, userId);
         if (updated != 1) {
             throw new BusinessException(40401, "订单不存在");
         }
-        return response(orderId, null, guests == null ? 0 : guests.size(), "入住人保存成功");
+        return response(orderId, null, normalizedGuests.size(), "入住人保存成功");
     }
 
     @Override
@@ -294,7 +321,7 @@ public class OrderActionServiceImpl implements OrderActionService {
 
     private void replaceGuests(Long orderId, List<OrderGuestSaveItemRequest> guests) {
         orderActionMapper.deleteOrderGuests(orderId);
-        if (guests == null) {
+        if (guests == null || guests.isEmpty()) {
             return;
         }
         for (int i = 0; i < guests.size(); i++) {
@@ -306,13 +333,62 @@ public class OrderActionServiceImpl implements OrderActionService {
             orderActionMapper.insertOrderGuest(
                     guestId,
                     orderId,
-                    requireText(guest.getGuestName(), "guestName"),
+                    guest.getGuestName(),
                     guest.getGuestMobile(),
-                    defaultString(guest.getGuestIdCardType(), "居民身份证"),
+                    guest.getGuestIdCardType(),
                     sensitiveDataCipher.encryptIdCard(trimToNull(guest.getGuestIdCard())),
                     defaultString(guest.getGuestType(), "adult")
             );
         }
+    }
+
+    private List<OrderGuestSaveItemRequest> normalizeGuests(List<OrderGuestSaveItemRequest> guests) {
+        if (guests == null || guests.isEmpty()) {
+            return List.of();
+        }
+        return guests.stream().map(this::normalizeGuest).toList();
+    }
+
+    private OrderGuestSaveItemRequest normalizeGuest(OrderGuestSaveItemRequest guest) {
+        if (guest == null) {
+            throw new BusinessException(40001, "入住人信息不能为空");
+        }
+        OrderGuestSaveItemRequest normalized = new OrderGuestSaveItemRequest();
+        normalized.setGuestId(guest.getGuestId());
+        normalized.setGuestName(normalizePersonName(guest.getGuestName()));
+        normalized.setGuestMobile(normalizeOptionalMainlandMobile(guest.getGuestMobile()));
+        String credentialType = InputValidationUtils.normalizeCredentialType(guest.getGuestIdCardType());
+        String credentialNumber = trimToNull(guest.getGuestIdCard());
+        if (!InputValidationUtils.isValidCredential(credentialType, credentialNumber)) {
+            throw new BusinessException(40001, credentialErrorMessage(credentialType));
+        }
+        normalized.setGuestIdCardType(credentialType);
+        normalized.setGuestIdCard(credentialNumber);
+        normalized.setGuestType(defaultString(guest.getGuestType(), "adult"));
+        return normalized;
+    }
+
+    private String normalizePersonName(String value) {
+        String normalized = trimToNull(value);
+        if (!InputValidationUtils.isValidPersonName(normalized)) {
+            throw new BusinessException(40001, "姓名格式不正确，请输入 2-30 个中文或英文字母");
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalMainlandMobile(String value) {
+        String normalized = trimToNull(value);
+        if (!InputValidationUtils.isValidOptionalMainlandMobile(normalized)) {
+            throw new BusinessException(40001, "手机号格式不正确");
+        }
+        return normalized;
+    }
+
+    private String credentialErrorMessage(String credentialType) {
+        if ("居民身份证".equals(credentialType)) {
+            return "居民身份证号格式不正确";
+        }
+        return "证件号码格式不正确";
     }
 
     private OrderActionRowVO requireOrder(Long campId, Long orderId) {
@@ -410,6 +486,19 @@ public class OrderActionServiceImpl implements OrderActionService {
             return skipStockRemark;
         }
         return existingRemark + "\n" + skipStockRemark;
+    }
+
+    private String appendNoShowRemark(String remark, String reason) {
+        String normalizedReason = trimToNull(reason);
+        if (normalizedReason == null) {
+            return remark;
+        }
+        String noShowRemark = "未到店原因：" + normalizedReason;
+        String existingRemark = trimToNull(remark);
+        if (existingRemark == null) {
+            return noShowRemark;
+        }
+        return existingRemark + "\n" + noShowRemark;
     }
 
     private void updateStatus(
@@ -615,7 +704,7 @@ public class OrderActionServiceImpl implements OrderActionService {
     }
 
     private String resolveSourceType(String sourceLabel) {
-        return switch (defaultString(sourceLabel, "自来客")) {
+        return switch (defaultString(sourceLabel, DEFAULT_LOCAL_CHANNEL_NAME)) {
             case "携程", "飞猪", "美团" -> "channel";
             case "电话订单" -> "phone";
             case "企业客户" -> "company";
