@@ -1,6 +1,7 @@
 package com.jeez.zp.room.mapper;
 
 import com.jeez.zp.room.vo.CleanTaskOptionVO;
+import com.jeez.zp.room.vo.CleanTaskActionRowVO;
 import com.jeez.zp.room.vo.CleanTaskQueryRowVO;
 import com.jeez.zp.room.vo.CleanTaskRoomRowVO;
 import com.jeez.zp.room.vo.CleanerPageQueryRowVO;
@@ -53,6 +54,15 @@ public interface CleanTaskMapper {
             @Param("cleanStaffId") Long cleanStaffId
     );
 
+    int insertCleaner(
+            @Param("cleanStaffId") Long cleanStaffId,
+            @Param("campId") Long campId,
+            @Param("name") String name,
+            @Param("mobile") String mobile,
+            @Param("status") Integer status,
+            @Param("remark") String remark
+    );
+
     int insertCleanTask(
             @Param("cleanTaskId") Long cleanTaskId,
             @Param("campId") Long campId,
@@ -64,6 +74,44 @@ public interface CleanTaskMapper {
             @Param("taskStatus") String taskStatus,
             @Param("deadlineAt") LocalDateTime deadlineAt,
             @Param("remark") String remark
+    );
+
+    CleanTaskActionRowVO selectTaskForUpdate(
+            @Param("campId") Long campId,
+            @Param("cleanTaskId") Long cleanTaskId
+    );
+
+    int updateCleanTaskAssignment(
+            @Param("campId") Long campId,
+            @Param("cleanTaskId") Long cleanTaskId,
+            @Param("cleanStaffId") Long cleanStaffId,
+            @Param("remark") String remark
+    );
+
+    int updateCleanTaskStatus(
+            @Param("campId") Long campId,
+            @Param("cleanTaskId") Long cleanTaskId,
+            @Param("taskStatus") String taskStatus,
+            @Param("remark") String remark
+    );
+
+    int updateRoomCleanStatus(
+            @Param("campId") Long campId,
+            @Param("roomId") Long roomId,
+            @Param("cleanStatus") String cleanStatus
+    );
+
+    int insertCleanLog(
+            @Param("cleanLogId") Long cleanLogId,
+            @Param("campId") Long campId,
+            @Param("poiId") Long poiId,
+            @Param("roomId") Long roomId,
+            @Param("roomCategoryId") Long roomCategoryId,
+            @Param("cleanTaskId") Long cleanTaskId,
+            @Param("cleanStaffId") Long cleanStaffId,
+            @Param("operatorId") Long operatorId,
+            @Param("actionType") String actionType,
+            @Param("actionDetail") String actionDetail
     );
 
     List<String> selectTaskIds(

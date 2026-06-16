@@ -466,6 +466,65 @@ class RoomStatusesMonthlyQueryIT {
         org.assertj.core.api.Assertions.assertThat(closeRoomCount).isEqualTo(0);
     }
 
+    @Test
+    @Timeout(60)
+    void roomStatusesCleanSave_shouldPersistRoomCleanStatus() throws Exception {
+        insertRoomCategory();
+        insertRoom();
+
+        mockMvc.perform(post("/roomStatuses/clean/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "roomCategoryId":"104001",
+                                  "roomId":"104101",
+                                  "cleanStatus":"dirty"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.roomCategoryId").value(String.valueOf(ROOM_CATEGORY_ID)))
+                .andExpect(jsonPath("$.data.roomId").value(String.valueOf(ROOM_ID)))
+                .andExpect(jsonPath("$.data.cleanStatus").value("dirty"))
+                .andExpect(jsonPath("$.data.isDirty").value(1));
+
+        String dirtyStatus = jdbcTemplate.queryForObject(
+                "SELECT clean_status FROM room WHERE camp_id = ? AND room_id = ?",
+                String.class,
+                CAMP_ID,
+                ROOM_ID
+        );
+        org.assertj.core.api.Assertions.assertThat(dirtyStatus).isEqualTo("dirty");
+
+        mockMvc.perform(post("/roomStatuses/clean/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "roomCategoryId":"104001",
+                                  "roomId":"104101",
+                                  "cleanStatus":"clean"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.cleanStatus").value("clean"))
+                .andExpect(jsonPath("$.data.isDirty").value(0));
+
+        String cleanStatus = jdbcTemplate.queryForObject(
+                "SELECT clean_status FROM room WHERE camp_id = ? AND room_id = ?",
+                String.class,
+                CAMP_ID,
+                ROOM_ID
+        );
+        org.assertj.core.api.Assertions.assertThat(cleanStatus).isEqualTo("clean");
+    }
+
     private String closePayload() {
         return """
                 {

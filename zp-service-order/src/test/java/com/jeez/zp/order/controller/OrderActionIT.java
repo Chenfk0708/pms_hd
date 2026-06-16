@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -591,6 +592,50 @@ class OrderActionIT {
         );
         assertThat(checkedOutAt).isNotNull();
         assertThat(checkedOutAt).isAfterOrEqualTo(guestRegisteredAt);
+
+        String roomCleanStatus = jdbcTemplate.queryForObject(
+                "SELECT clean_status FROM room WHERE camp_id = ? AND room_id = ?",
+                String.class,
+                CAMP_ID,
+                OrderTestCatalogFixture.STANDARD_ROOM_ID
+        );
+        assertThat(roomCleanStatus).isEqualTo("dirty");
+
+        var checkoutCleanTasks = jdbcTemplate.queryForList("""
+                        SELECT clean_task_id, task_type, task_status, clean_staff_id, deadline_at
+                        FROM clean_task
+                        WHERE camp_id = ?
+                          AND poi_id = ?
+                          AND room_id = ?
+                          AND room_category_id = ?
+                          AND task_type = 'checkout_clean'
+                        """,
+                CAMP_ID,
+                OrderTestCatalogFixture.POI_ID,
+                OrderTestCatalogFixture.STANDARD_ROOM_ID,
+                OrderTestCatalogFixture.STANDARD_ROOM_CATEGORY_ID
+        );
+        assertThat(checkoutCleanTasks).hasSize(1);
+        Map<String, Object> checkoutCleanTask = checkoutCleanTasks.get(0);
+        assertThat(checkoutCleanTask.get("task_status")).isEqualTo("pending");
+        assertThat(checkoutCleanTask.get("clean_staff_id")).isNull();
+        assertThat(checkoutCleanTask.get("deadline_at")).isNotNull();
+
+        Long cleanTaskId = ((Number) checkoutCleanTask.get("clean_task_id")).longValue();
+        Integer cleanLogCount = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(1)
+                        FROM clean_log
+                        WHERE camp_id = ?
+                          AND clean_task_id = ?
+                          AND action_type = 'checkout_auto_create'
+                          AND operator_id = ?
+                        """,
+                Integer.class,
+                CAMP_ID,
+                cleanTaskId,
+                12001L
+        );
+        assertThat(cleanLogCount).isEqualTo(1);
     }
 
     @Test
@@ -926,6 +971,23 @@ class OrderActionIT {
     }
 
     private void resetOrders() {
+        ensureCleanLogTable();
+        jdbcTemplate.update(
+                "DELETE FROM clean_log WHERE camp_id = ? AND room_id IN (?, ?, ?, ?)",
+                CAMP_ID,
+                OrderTestCatalogFixture.STANDARD_ROOM_ID,
+                OrderTestCatalogFixture.STANDARD_CHANGE_ROOM_ID,
+                OrderTestCatalogFixture.STANDARD_OCCUPIED_ROOM_ID,
+                OrderTestCatalogFixture.DELUXE_ROOM_ID
+        );
+        jdbcTemplate.update(
+                "DELETE FROM clean_task WHERE camp_id = ? AND room_id IN (?, ?, ?, ?)",
+                CAMP_ID,
+                OrderTestCatalogFixture.STANDARD_ROOM_ID,
+                OrderTestCatalogFixture.STANDARD_CHANGE_ROOM_ID,
+                OrderTestCatalogFixture.STANDARD_OCCUPIED_ROOM_ID,
+                OrderTestCatalogFixture.DELUXE_ROOM_ID
+        );
         jdbcTemplate.update("DELETE FROM order_payment_record WHERE camp_id = ? AND order_id BETWEEN 40001 AND 40020", CAMP_ID);
         jdbcTemplate.update("DELETE FROM distribution_order WHERE camp_id = ? AND source_order_id BETWEEN 40001 AND 40020", CAMP_ID);
         jdbcTemplate.update("DELETE FROM order_guest WHERE order_id BETWEEN 40001 AND 40020");
@@ -983,6 +1045,27 @@ class OrderActionIT {
                 CAMP_ID,
                 OrderTestCatalogFixture.STANDARD_ROOM_ID
         );
+    }
+
+    private void ensureCleanLogTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS clean_log (
+                  clean_log_id BIGINT UNSIGNED NOT NULL,
+                  camp_id BIGINT UNSIGNED NOT NULL,
+                  poi_id BIGINT UNSIGNED NOT NULL,
+                  room_id BIGINT UNSIGNED NOT NULL,
+                  room_category_id BIGINT UNSIGNED NOT NULL,
+                  clean_task_id BIGINT UNSIGNED NOT NULL,
+                  clean_staff_id BIGINT UNSIGNED DEFAULT NULL,
+                  operator_id BIGINT UNSIGNED DEFAULT NULL,
+                  action_type VARCHAR(32) NOT NULL,
+                  action_detail VARCHAR(255) DEFAULT NULL,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (clean_log_id),
+                  KEY idx_clean_log_task_created_at (clean_task_id, created_at),
+                  KEY idx_clean_log_camp_created_at (camp_id, created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+                """);
     }
 
     private void insertRoomStatusBlock(long blockId, LocalDate bizDate, String reason) {

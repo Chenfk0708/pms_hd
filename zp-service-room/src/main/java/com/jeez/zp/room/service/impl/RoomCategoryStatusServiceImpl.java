@@ -6,6 +6,9 @@ import com.jeez.zp.room.mapper.RoomCategoryPricingMapper;
 import com.jeez.zp.room.mapper.RoomStatusesMonthlyMapper;
 import com.jeez.zp.room.mapper.UserCampMapper;
 import com.jeez.zp.room.service.RoomCategoryStatusService;
+import com.jeez.zp.room.vo.ChannelCalendarPriceSaveResponseVO;
+import com.jeez.zp.room.vo.ChannelProductCoefficientRowVO;
+import com.jeez.zp.room.vo.ChannelProductCoefficientSaveResponseVO;
 import com.jeez.zp.room.vo.ChannelRoomCategoryStatusVO;
 import com.jeez.zp.room.vo.PageXVO;
 import com.jeez.zp.room.vo.RoomCategoryAvailableStockRowVO;
@@ -22,6 +25,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -40,6 +45,7 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
     private static final String CENTRAL_PRICE_TYPE_ACTIVE = "active";
     private static final String CENTRAL_PRICE_TYPE_DISABLED = "disabled";
     private static final String CENTRAL_SALE_STATUS_DISABLED_REASON = "\u4e2d\u592e\u4ef7\u505c\u552e\u8054\u52a8\u5173\u623f";
+    private static final String EMPTY_EXPRESS_VALUE = "-";
     private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -86,12 +92,24 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
                 startDate,
                 resolvedDays
         );
+        Map<String, Map<String, RoomCategoryPriceSnapshotRowVO>> channelSnapshots = selectChannelSnapshots(
+                resolvedCampId,
+                groupedRoomCategoryIds,
+                normalizedChannelIds,
+                startDate,
+                resolvedDays
+        );
         Map<String, Map<String, Long>> stocks = selectAvailableStocks(
                 resolvedCampId,
                 groupedRoomCategoryIds,
                 normalizedPoiIds,
                 startDate,
                 resolvedDays
+        );
+        Map<String, ChannelProductCoefficientRowVO> coefficientMap = selectProductCoefficientMap(
+                resolvedCampId,
+                groupedRoomCategoryIds,
+                normalizedChannelIds
         );
 
         List<RoomCategoryStatusRoomVO> roomStatusViews = grouped.values().stream()
@@ -102,7 +120,9 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
                             startDate,
                             resolvedDays,
                             snapshots.getOrDefault(roomCategoryId, Map.of()),
-                            stocks.getOrDefault(roomCategoryId, Map.of())
+                            stocks.getOrDefault(roomCategoryId, Map.of()),
+                            coefficientMap,
+                            channelSnapshots
                     );
                 })
                 .toList();
@@ -269,6 +289,18 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
                 startDate,
                 resolvedDays
         );
+        Map<String, ChannelProductCoefficientRowVO> coefficientMap = selectProductCoefficientMap(
+                resolvedCampId,
+                pricedRoomCategoryIds,
+                normalizedChannelIds
+        );
+        Map<String, Map<String, RoomCategoryPriceSnapshotRowVO>> channelSnapshots = selectChannelSnapshots(
+                resolvedCampId,
+                pricedRoomCategoryIds,
+                normalizedChannelIds,
+                startDate,
+                resolvedDays
+        );
 
         List<RoomCategoryChannelStatusRowVO> rows = pricingRows.stream()
                 .filter(this::hasChannel)
@@ -276,7 +308,9 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
                         row,
                         startDate,
                         resolvedDays,
-                        stocks.getOrDefault(row.getRoomCategoryId(), Map.of())
+                        stocks.getOrDefault(row.getRoomCategoryId(), Map.of()),
+                        coefficientMap,
+                        channelSnapshots.getOrDefault(channelSnapshotKey(row.getRoomCategoryId(), row.getChannelId()), Map.of())
                 ))
                 .toList();
 
@@ -285,6 +319,119 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
         RoomCategoryChannelStatusResponseVO response = new RoomCategoryChannelStatusResponseVO();
         response.setList(pageSlice.items());
         response.setPageX(toPageX(pageSlice, resolvedPageNum, resolvedPageSize));
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public ChannelProductCoefficientSaveResponseVO saveChannelProductCoefficient(
+            Long campId,
+            Long userId,
+            String roomCategoryId,
+            String channelId,
+            String productName,
+            String operator,
+            BigDecimal coefficientValue
+    ) {
+        return saveChannelProductCoefficients(
+                campId,
+                userId,
+                List.of(new ChannelProductCoefficientInput(
+                        roomCategoryId,
+                        channelId,
+                        productName,
+                        operator,
+                        coefficientValue
+                ))
+        );
+    }
+
+    @Override
+    @Transactional
+    public ChannelProductCoefficientSaveResponseVO saveChannelProductCoefficients(
+            Long campId,
+            Long userId,
+            List<ChannelProductCoefficientInput> items
+    ) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        if (items == null || items.isEmpty()) {
+            throw new BusinessException(40001, "请选择需要调整产品系数的产品");
+        }
+
+        List<ChannelProductCoefficientRowVO> savedItems = new ArrayList<>();
+        for (ChannelProductCoefficientInput item : items) {
+            Long roomCategoryId = parseRequiredLong(item.roomCategoryId(), "roomCategoryId");
+            Long channelId = parseRequiredLong(item.channelId(), "channelId");
+            String productName = requireText(item.productName(), "productName");
+            String operator = normalizeOperator(item.operator());
+            BigDecimal coefficientValue = normalizeCoefficientValue(item.coefficientValue(), operator);
+
+            roomCategoryPricingMapper.upsertProductCoefficient(
+                    IdWorker.getId(),
+                    resolvedCampId,
+                    roomCategoryId,
+                    channelId,
+                    productName,
+                    operator,
+                    coefficientValue
+            );
+            savedItems.add(toCoefficientResponseRow(
+                    resolvedCampId,
+                    roomCategoryId,
+                    channelId,
+                    productName,
+                    operator,
+                    coefficientValue
+            ));
+        }
+
+        ChannelProductCoefficientSaveResponseVO response = new ChannelProductCoefficientSaveResponseVO();
+        response.setSavedCount(savedItems.size());
+        response.setItems(savedItems);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public ChannelCalendarPriceSaveResponseVO saveChannelCalendarPrices(
+            Long campId,
+            Long userId,
+            boolean overwriteStandalone,
+            List<ChannelCalendarPriceInput> items
+    ) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        if (items == null || items.isEmpty()) {
+            throw new BusinessException(40001, "请选择需要调整价格的日期");
+        }
+
+        int savedCount = 0;
+        for (ChannelCalendarPriceInput item : items) {
+            Long roomCategoryId = parseRequiredLong(item.roomCategoryId(), "roomCategoryId");
+            Long channelId = parseRequiredLong(item.channelId(), "channelId");
+            LocalDate bizDate = resolveStartDate(item.date());
+            long priceCent = resolveChannelCalendarPriceCent(
+                    item.priceUpdateType(),
+                    item.calendarPrice(),
+                    item.basePrice()
+            );
+
+            int affected = roomCategoryPricingMapper.saveChannelPriceSnapshot(
+                    IdWorker.getId(),
+                    resolvedCampId,
+                    roomCategoryId,
+                    channelId,
+                    bizDate,
+                    priceCent,
+                    overwriteStandalone
+            );
+            if (affected == 0 && overwriteStandalone) {
+                throw new BusinessException(40404, "未找到当前房型，无法更新渠道价格");
+            }
+            savedCount += affected > 0 ? 1 : 0;
+        }
+
+        ChannelCalendarPriceSaveResponseVO response = new ChannelCalendarPriceSaveResponseVO();
+        response.setSavedCount(savedCount);
         return response;
     }
 
@@ -364,7 +511,9 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
             LocalDate startDate,
             int days,
             Map<String, RoomCategoryPriceSnapshotRowVO> snapshots,
-            Map<String, Long> stocks
+            Map<String, Long> stocks,
+            Map<String, ChannelProductCoefficientRowVO> coefficientMap,
+            Map<String, Map<String, RoomCategoryPriceSnapshotRowVO>> channelSnapshots
     ) {
         RoomCategoryPricingRowVO first = groupRows.get(0);
         long basePrice = resolveBasePrice(first);
@@ -378,7 +527,13 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
         room.setStatusViews(dayViews);
         room.setChannelRoomCategoryStatuses(groupRows.stream()
                 .filter(this::hasChannel)
-                .map(row -> toNestedChannelStatus(row, startDate, days, basePrice, stocks))
+                .map(row -> toNestedChannelStatus(
+                        row,
+                        basePrice,
+                        dayViews,
+                        coefficientMap,
+                        channelSnapshots.getOrDefault(channelSnapshotKey(row.getRoomCategoryId(), row.getChannelId()), Map.of())
+                ))
                 .toList());
         return room;
     }
@@ -399,6 +554,35 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
                     .putIfAbsent(row.getBizDate(), row);
         }
         return snapshots;
+    }
+
+    private Map<String, Map<String, RoomCategoryPriceSnapshotRowVO>> selectChannelSnapshots(
+            Long campId,
+            List<Long> roomCategoryIds,
+            List<Long> channelIds,
+            LocalDate startDate,
+            int days
+    ) {
+        if (roomCategoryIds.isEmpty()) {
+            return Map.of();
+        }
+        LocalDate endDate = startDate.plusDays(days - 1L);
+        Map<String, Map<String, RoomCategoryPriceSnapshotRowVO>> snapshots = new LinkedHashMap<>();
+        for (RoomCategoryPriceSnapshotRowVO row : roomCategoryPricingMapper.selectChannelPriceSnapshots(
+                campId,
+                roomCategoryIds,
+                channelIds,
+                startDate,
+                endDate
+        )) {
+            snapshots.computeIfAbsent(channelSnapshotKey(row.getRoomCategoryId(), row.getChannelId()), ignored -> new LinkedHashMap<>())
+                    .putIfAbsent(row.getBizDate(), row);
+        }
+        return snapshots;
+    }
+
+    private String channelSnapshotKey(String roomCategoryId, String channelId) {
+        return roomCategoryId + "\u001F" + channelId;
     }
 
     private Map<String, Map<String, Long>> selectAvailableStocks(
@@ -428,19 +612,21 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
 
     private ChannelRoomCategoryStatusVO toNestedChannelStatus(
             RoomCategoryPricingRowVO row,
-            LocalDate startDate,
-            int days,
             long basePrice,
-            Map<String, Long> stocks
+            List<RoomCategoryStatusDayVO> centralDayViews,
+            Map<String, ChannelProductCoefficientRowVO> coefficientMap,
+            Map<String, RoomCategoryPriceSnapshotRowVO> channelSnapshots
     ) {
+        ChannelProductCoefficientRowVO coefficient = findProductCoefficient(row, coefficientMap);
+        long saleBasePrice = applyCoefficient(basePrice, coefficient);
         ChannelRoomCategoryStatusVO channelStatus = new ChannelRoomCategoryStatusVO();
         channelStatus.setChannelId(row.getChannelId());
         channelStatus.setChannelName(row.getChannelName());
         channelStatus.setChannelRoomCategoryName(resolveProductName(row));
-        channelStatus.setExpressValue("1.00");
+        channelStatus.setExpressValue(expressValueOf(coefficient));
         channelStatus.setNormalPrice(basePrice);
-        channelStatus.setNormalActualSalePrice(basePrice);
-        channelStatus.setStatusViews(buildDayViews(startDate, days, basePrice, basePrice, stocks));
+        channelStatus.setNormalActualSalePrice(saleBasePrice);
+        channelStatus.setStatusViews(buildChannelDayViews(centralDayViews, coefficient, channelSnapshots));
         return channelStatus;
     }
 
@@ -448,24 +634,222 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
             RoomCategoryPricingRowVO row,
             LocalDate startDate,
             int days,
-            Map<String, Long> stocks
+            Map<String, Long> stocks,
+            Map<String, ChannelProductCoefficientRowVO> coefficientMap,
+            Map<String, RoomCategoryPriceSnapshotRowVO> channelSnapshots
     ) {
         long basePrice = resolveBasePrice(row);
+        ChannelProductCoefficientRowVO coefficient = findProductCoefficient(row, coefficientMap);
+        long saleBasePrice = applyCoefficient(basePrice, coefficient);
         RoomCategoryChannelStatusRowVO channelRow = new RoomCategoryChannelStatusRowVO();
         channelRow.setRoomCategoryId(row.getRoomCategoryId());
         channelRow.setRoomCategoryName(row.getRoomCategoryName());
         channelRow.setRoomCategoryProductName(resolveProductName(row));
         channelRow.setChannelId(row.getChannelId());
         channelRow.setChannelName(row.getChannelName());
-        channelRow.setExpressValue("1.00");
+        channelRow.setExpressValue(expressValueOf(coefficient));
         channelRow.setNormalPrice(basePrice);
-        channelRow.setNormalActualSalePrice(basePrice);
-        channelRow.setStatusViews(buildDayViews(startDate, days, basePrice, basePrice, stocks));
+        channelRow.setNormalActualSalePrice(saleBasePrice);
+        channelRow.setStatusViews(buildChannelDayViews(startDate, days, basePrice, stocks, coefficient, channelSnapshots));
         return channelRow;
     }
 
     private boolean hasChannel(RoomCategoryPricingRowVO row) {
         return row.getChannelId() != null && !row.getChannelId().isBlank();
+    }
+
+    private Map<String, ChannelProductCoefficientRowVO> selectProductCoefficientMap(
+            Long campId,
+            List<Long> roomCategoryIds,
+            List<Long> channelIds
+    ) {
+        if (roomCategoryIds == null || roomCategoryIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, ChannelProductCoefficientRowVO> coefficientMap = new LinkedHashMap<>();
+        for (ChannelProductCoefficientRowVO row : roomCategoryPricingMapper.selectProductCoefficients(
+                campId,
+                roomCategoryIds,
+                channelIds
+        )) {
+            row.setExpressValue(formatExpressValue(row.getOperator(), row.getCoefficientValue()));
+            coefficientMap.put(coefficientKey(row.getRoomCategoryId(), row.getChannelId(), row.getProductName()), row);
+        }
+        return coefficientMap;
+    }
+
+    private ChannelProductCoefficientRowVO findProductCoefficient(
+            RoomCategoryPricingRowVO row,
+            Map<String, ChannelProductCoefficientRowVO> coefficientMap
+    ) {
+        if (coefficientMap.isEmpty()) {
+            return null;
+        }
+        return coefficientMap.get(coefficientKey(row.getRoomCategoryId(), row.getChannelId(), resolveProductName(row)));
+    }
+
+    private String coefficientKey(String roomCategoryId, String channelId, String productName) {
+        return roomCategoryId + "\u001F" + channelId + "\u001F" + productName;
+    }
+
+    private String expressValueOf(ChannelProductCoefficientRowVO coefficient) {
+        if (coefficient == null) {
+            return EMPTY_EXPRESS_VALUE;
+        }
+        return formatExpressValue(coefficient.getOperator(), coefficient.getCoefficientValue());
+    }
+
+    private String formatExpressValue(String operator, BigDecimal coefficientValue) {
+        return operator + coefficientValue.stripTrailingZeros().toPlainString();
+    }
+
+    private long applyCoefficient(long basePrice, ChannelProductCoefficientRowVO coefficient) {
+        if (coefficient == null) {
+            return basePrice;
+        }
+        BigDecimal base = BigDecimal.valueOf(basePrice);
+        BigDecimal value = coefficient.getCoefficientValue();
+        BigDecimal result = switch (coefficient.getOperator()) {
+            case "+" -> base.add(yuanToCent(value));
+            case "-" -> base.subtract(yuanToCent(value));
+            case "*" -> base.multiply(value);
+            case "/" -> base.divide(value, 8, RoundingMode.HALF_UP);
+            default -> throw new BusinessException(40001, "产品系数运算符不正确");
+        };
+        if (result.signum() < 0) {
+            throw new BusinessException(40001, "产品系数计算后的价格不能小于0");
+        }
+        return result.setScale(0, RoundingMode.HALF_UP).longValue();
+    }
+
+    private BigDecimal yuanToCent(BigDecimal yuan) {
+        return yuan.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP);
+    }
+
+    private long resolveChannelCalendarPriceCent(
+            Integer priceUpdateType,
+            BigDecimal calendarPrice,
+            BigDecimal basePrice
+    ) {
+        if (calendarPrice == null) {
+            throw new BusinessException(40001, "calendarPrice不能为空");
+        }
+        int normalizedType = priceUpdateType == null ? 1 : priceUpdateType;
+        BigDecimal result = switch (normalizedType) {
+            case 1 -> yuanToCent(calendarPrice);
+            case 2 -> yuanToCent(requirePriceBase(basePrice)).add(yuanToCent(calendarPrice));
+            case 3 -> yuanToCent(requirePriceBase(basePrice)).multiply(calendarPrice)
+                    .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
+            default -> throw new BusinessException(40001, "priceUpdateType仅支持1、2、3");
+        };
+        if (result.signum() < 0) {
+            throw new BusinessException(40001, "渠道价格不能小于0");
+        }
+        return result.setScale(0, RoundingMode.HALF_UP).longValue();
+    }
+
+    private BigDecimal requirePriceBase(BigDecimal basePrice) {
+        if (basePrice == null) {
+            throw new BusinessException(40001, "basePrice不能为空");
+        }
+        return basePrice;
+    }
+
+    private List<RoomCategoryStatusDayVO> buildChannelDayViews(
+            List<RoomCategoryStatusDayVO> centralDayViews,
+            ChannelProductCoefficientRowVO coefficient,
+            Map<String, RoomCategoryPriceSnapshotRowVO> channelSnapshots
+    ) {
+        List<RoomCategoryStatusDayVO> dayViews = new ArrayList<>();
+        for (RoomCategoryStatusDayVO centralDayView : centralDayViews) {
+            RoomCategoryPriceSnapshotRowVO snapshot = channelSnapshots.get(centralDayView.getDate());
+            RoomCategoryStatusDayVO dayView = new RoomCategoryStatusDayVO();
+            dayView.setDate(centralDayView.getDate());
+            dayView.setTotalStock(centralDayView.getTotalStock());
+            dayView.setPrice(centralDayView.getPrice());
+            dayView.setSalePrice(snapshot != null && snapshot.getPriceCent() != null
+                    ? snapshot.getPriceCent()
+                    : applyCoefficient(centralDayView.getPrice(), coefficient));
+            dayView.setSaleEnabled(centralDayView.getSaleEnabled());
+            dayViews.add(dayView);
+        }
+        return dayViews;
+    }
+
+    private List<RoomCategoryStatusDayVO> buildChannelDayViews(
+            LocalDate startDate,
+            int days,
+            long basePrice,
+            Map<String, Long> stocks,
+            ChannelProductCoefficientRowVO coefficient,
+            Map<String, RoomCategoryPriceSnapshotRowVO> channelSnapshots
+    ) {
+        List<RoomCategoryStatusDayVO> dayViews = new ArrayList<>();
+        for (int index = 0; index < days; index++) {
+            LocalDate current = startDate.plusDays(index);
+            String dateValue = current.format(DATE_FORMATTER);
+            RoomCategoryPriceSnapshotRowVO snapshot = channelSnapshots.get(dateValue);
+            RoomCategoryStatusDayVO dayView = new RoomCategoryStatusDayVO();
+            dayView.setDate(dateValue);
+            dayView.setTotalStock(stockForDate(stocks, dateValue));
+            dayView.setPrice(basePrice);
+            dayView.setSalePrice(snapshot != null && snapshot.getPriceCent() != null
+                    ? snapshot.getPriceCent()
+                    : applyCoefficient(basePrice, coefficient));
+            dayView.setSaleEnabled(true);
+            dayViews.add(dayView);
+        }
+        return dayViews;
+    }
+
+    private String normalizeOperator(String operator) {
+        if (operator == null || operator.isBlank()) {
+            throw new BusinessException(40001, "operator不能为空");
+        }
+        String normalized = operator.trim();
+        if (!("+".equals(normalized) || "-".equals(normalized) || "*".equals(normalized) || "/".equals(normalized))) {
+            throw new BusinessException(40001, "产品系数运算符仅支持 +、-、*、/");
+        }
+        return normalized;
+    }
+
+    private BigDecimal normalizeCoefficientValue(BigDecimal coefficientValue, String operator) {
+        if (coefficientValue == null) {
+            throw new BusinessException(40001, "coefficientValue不能为空");
+        }
+        if (coefficientValue.signum() < 0) {
+            throw new BusinessException(40001, "产品系数数值不能小于0");
+        }
+        if ("/".equals(operator) && coefficientValue.compareTo(BigDecimal.ZERO) == 0) {
+            throw new BusinessException(40001, "产品系数除数不能为0");
+        }
+        return coefficientValue.stripTrailingZeros();
+    }
+
+    private String requireText(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(40001, fieldName + "不能为空");
+        }
+        return value.trim();
+    }
+
+    private ChannelProductCoefficientRowVO toCoefficientResponseRow(
+            Long campId,
+            Long roomCategoryId,
+            Long channelId,
+            String productName,
+            String operator,
+            BigDecimal coefficientValue
+    ) {
+        ChannelProductCoefficientRowVO row = new ChannelProductCoefficientRowVO();
+        row.setCampId(String.valueOf(campId));
+        row.setRoomCategoryId(String.valueOf(roomCategoryId));
+        row.setChannelId(String.valueOf(channelId));
+        row.setProductName(productName);
+        row.setOperator(operator);
+        row.setCoefficientValue(coefficientValue);
+        row.setExpressValue(formatExpressValue(operator, coefficientValue));
+        return row;
     }
 
 
@@ -506,28 +890,6 @@ public class RoomCategoryStatusServiceImpl implements RoomCategoryStatusService 
             pricesByDate.put(parts[0], Long.valueOf(parts[1]));
         }
         return pricesByDate;
-    }
-
-    private List<RoomCategoryStatusDayVO> buildDayViews(
-            LocalDate startDate,
-            int days,
-            long price,
-            long salePrice,
-            Map<String, Long> stocks
-    ) {
-        List<RoomCategoryStatusDayVO> dayViews = new ArrayList<>();
-        for (int index = 0; index < days; index++) {
-            LocalDate current = startDate.plusDays(index);
-            String dateValue = current.format(DATE_FORMATTER);
-            RoomCategoryStatusDayVO dayView = new RoomCategoryStatusDayVO();
-            dayView.setDate(dateValue);
-            dayView.setTotalStock(stockForDate(stocks, dateValue));
-            dayView.setPrice(price);
-            dayView.setSalePrice(salePrice);
-            dayView.setSaleEnabled(true);
-            dayViews.add(dayView);
-        }
-        return dayViews;
     }
 
     private List<RoomCategoryStatusDayVO> buildCentralDayViews(

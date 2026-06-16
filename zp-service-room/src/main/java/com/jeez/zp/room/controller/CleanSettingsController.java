@@ -54,7 +54,7 @@ public class CleanSettingsController {
         );
     }
 
-    @PostMapping("/cleanManage/cleanSetting/rule/save")
+    @PostMapping({"/cleanSettings/rule/save", "/cleanManage/cleanSetting/rule/save"})
     public HudsonResponse<CleanSettingRuleSaveResponseVO> saveRule(@RequestBody CleanSettingRuleSaveRequest request) {
         return HudsonResponse.success(
                 cleanSettingService.savePolicyRule(
@@ -66,7 +66,7 @@ public class CleanSettingsController {
         );
     }
 
-    @PostMapping("/cleanManage/cleanSetting/export")
+    @PostMapping({"/cleanSettings/export", "/cleanManage/cleanSetting/export"})
     public HudsonResponse<CleanSettingExportResponseVO> export(@RequestBody CleanSettingsBootstrapRequest request) {
         return HudsonResponse.success(
                 cleanSettingService.export(

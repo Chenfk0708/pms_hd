@@ -3,9 +3,11 @@ package com.jeez.zp.room.controller;
 import com.jeez.zp.room.api.HudsonResponse;
 import com.jeez.zp.room.api.TraceIdFactory;
 import com.jeez.zp.room.dto.request.RoomStatusCloseRequest;
+import com.jeez.zp.room.dto.request.RoomStatusCleanRequest;
 import com.jeez.zp.room.dto.request.RoomStatusesMonthlyRequest;
 import com.jeez.zp.room.security.LoginUserContext;
 import com.jeez.zp.room.service.RoomStatusesMonthlyService;
+import com.jeez.zp.room.vo.RoomStatusCleanResponseVO;
 import com.jeez.zp.room.vo.RoomStatusCloseResponseVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyBlockVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyDailyMonitorVO;
@@ -40,6 +42,14 @@ public class RoomStatusesMonthlyController {
         return HudsonResponse.success(
                 roomStatusesMonthlyService.openRoom(request, LoginUserContext.requiredUserId()),
                 TraceIdFactory.next("room-statuses-open-save")
+        );
+    }
+
+    @PostMapping("/roomStatuses/clean/save")
+    public HudsonResponse<RoomStatusCleanResponseVO> saveRoomCleanStatus(@RequestBody RoomStatusCleanRequest request) {
+        return HudsonResponse.success(
+                roomStatusesMonthlyService.saveRoomCleanStatus(request, LoginUserContext.requiredUserId()),
+                TraceIdFactory.next("room-statuses-clean-save")
         );
     }
 

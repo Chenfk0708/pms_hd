@@ -201,7 +201,12 @@
         SELECT
             CAST(r.room_category_id AS CHAR) AS roomCategoryId,
             CAST(r.room_id AS CHAR) AS roomId,
-            r.room_name AS roomName
+            r.room_name AS roomName,
+            COALESCE(r.clean_status, 'clean') AS cleanStatus,
+            CASE
+                WHEN COALESCE(r.clean_status, 'clean') = 'dirty' THEN 1
+                ELSE 0
+            END AS isDirty
         FROM room r
         JOIN room_category rc ON rc.room_category_id = r.room_category_id
             AND rc.camp_id = r.camp_id

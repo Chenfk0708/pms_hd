@@ -410,6 +410,16 @@
           AND room_category_id = #{roomCategoryId}
     </update>
 
+    <update id="updateRoomCleanStatus">
+        UPDATE room
+        SET clean_status = #{cleanStatus},
+            updated_at = NOW(),
+            updated_by = #{userId}
+        WHERE camp_id = #{campId}
+          AND room_id = #{roomId}
+          AND is_deleted = 0
+    </update>
+
     <select id="selectBlockRows" resultType="com.jeez.zp.room.vo.RoomStatusesMonthlyBlockVO">
         SELECT
             CAST(rsb.room_category_id AS CHAR) AS roomCategoryId,

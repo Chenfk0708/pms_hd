@@ -81,7 +81,7 @@ class RoomCategoryStatusQueryIT {
                 .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].channelId").value("100"))
                 .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].channelName").value("宿银平台"))
                 .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].channelRoomCategoryName").value("TDD状态标准大床房<无早>"))
-                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].expressValue").value("1.00"))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].expressValue").value("-"))
                 .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].statusViews[0].salePrice").value(19900));
     }
 
@@ -304,13 +304,218 @@ class RoomCategoryStatusQueryIT {
                 .andExpect(jsonPath("$.data.list[0].roomCategoryProductName").value("TDD\u72B6\u6001\u6807\u51C6\u5927\u5E8A\u623F<\u65E0\u65E9>"))
                 .andExpect(jsonPath("$.data.list[0].channelId").value("100"))
                 .andExpect(jsonPath("$.data.list[0].channelName").value("宿银平台"))
-                .andExpect(jsonPath("$.data.list[0].expressValue").value("1.00"))
+                .andExpect(jsonPath("$.data.list[0].expressValue").value("-"))
                 .andExpect(jsonPath("$.data.list[0].normalPrice").value(19900))
                 .andExpect(jsonPath("$.data.list[0].normalActualSalePrice").value(19900))
                 .andExpect(jsonPath("$.data.list[0].statusViews.length()").value(3))
                 .andExpect(jsonPath("$.data.list[0].statusViews[0].date").value("2026-05-18"))
                 .andExpect(jsonPath("$.data.list[0].statusViews[0].price").value(19900))
                 .andExpect(jsonPath("$.data.list[0].statusViews[0].salePrice").value(19900));
+    }
+
+    @Test
+    @Timeout(60)
+    void roomCategoryStatusesChannelPriceSave_shouldPersistAndApplyToCentralAndChannelRp() throws Exception {
+        seedRoomCategoryStatuses();
+
+        mockMvc.perform(post("/roomCategoryStatuses/roomCategory/channel/price/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "overwriteStandalone":true,
+                                  "items":[
+                                    {
+                                      "roomCategoryId":"126001",
+                                      "channelId":"100",
+                                      "productName":"TDD状态标准大床房<无早>",
+                                      "date":"2026-05-18",
+                                      "priceUpdateType":1,
+                                      "calendarPrice":"299",
+                                      "basePrice":"199"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.savedCount").value(1));
+
+        mockMvc.perform(post("/roomCategoryStatuses/central/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "channelIds":["100"],
+                                  "roomCategoryIds":["126001"],
+                                  "date":"2026-05-18",
+                                  "days":1,
+                                  "pageNum":1,
+                                  "pageSize":10
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].statusViews[0].price").value(19900))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].statusViews[0].price").value(19900))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].statusViews[0].salePrice").value(29900));
+
+        mockMvc.perform(post("/roomCategoryStatuses/roomCategory/channel/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "channelIds":["100"],
+                                  "roomCategoryIds":["126001"],
+                                  "date":"2026-05-18",
+                                  "days":1,
+                                  "pageNum":1,
+                                  "pageSize":10,
+                                  "isFinalChannelRp":1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.list[0].statusViews[0].price").value(19900))
+                .andExpect(jsonPath("$.data.list[0].statusViews[0].salePrice").value(29900));
+    }
+
+    @Test
+    @Timeout(60)
+    void roomCategoryStatusesChannelCoefficientSave_shouldPersistAndApplyToCentralAndChannelRp() throws Exception {
+        seedRoomCategoryStatuses();
+
+        mockMvc.perform(post("/roomCategoryStatuses/roomCategory/channel/coefficient/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "roomCategoryId":"126001",
+                                  "channelId":"100",
+                                  "productName":"TDD状态标准大床房<无早>",
+                                  "operator":"*",
+                                  "coefficientValue":"0.93"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.savedCount").value(1))
+                .andExpect(jsonPath("$.data.items[0].roomCategoryId").value("126001"))
+                .andExpect(jsonPath("$.data.items[0].channelId").value("100"))
+                .andExpect(jsonPath("$.data.items[0].productName").value("TDD状态标准大床房<无早>"))
+                .andExpect(jsonPath("$.data.items[0].expressValue").value("*0.93"));
+
+        mockMvc.perform(post("/roomCategoryStatuses/central/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "channelIds":["100"],
+                                  "roomCategoryIds":["126001"],
+                                  "date":"2026-05-18",
+                                  "days":1,
+                                  "pageNum":1,
+                                  "pageSize":10
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].expressValue").value("*0.93"))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].normalPrice").value(19900))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].normalActualSalePrice").value(18507))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].statusViews[0].price").value(19900))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].statusViews[0].salePrice").value(18507));
+
+        mockMvc.perform(post("/roomCategoryStatuses/roomCategory/channel/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "channelIds":["100"],
+                                  "roomCategoryIds":["126001"],
+                                  "date":"2026-05-18",
+                                  "days":1,
+                                  "pageNum":1,
+                                  "pageSize":10,
+                                  "isFinalChannelRp":1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.list[0].expressValue").value("*0.93"))
+                .andExpect(jsonPath("$.data.list[0].statusViews[0].price").value(19900))
+                .andExpect(jsonPath("$.data.list[0].statusViews[0].salePrice").value(18507));
+    }
+
+    @Test
+    @Timeout(60)
+    void roomCategoryStatusesChannelCoefficientBatchSave_shouldApplyMultipleProducts() throws Exception {
+        seedRoomCategoryStatuses();
+
+        mockMvc.perform(post("/roomCategoryStatuses/roomCategory/channel/coefficient/batchSave")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "items":[
+                                    {
+                                      "roomCategoryId":"126001",
+                                      "channelId":"100",
+                                      "productName":"TDD状态标准大床房<无早>",
+                                      "operator":"+",
+                                      "coefficientValue":"20"
+                                    },
+                                    {
+                                      "roomCategoryId":"126002",
+                                      "channelId":"100",
+                                      "productName":"TDD状态豪华双床房<双早>",
+                                      "operator":"-",
+                                      "coefficientValue":"30"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.savedCount").value(2))
+                .andExpect(jsonPath("$.data.items[0].expressValue").value("+20"))
+                .andExpect(jsonPath("$.data.items[1].expressValue").value("-30"));
+
+        mockMvc.perform(post("/roomCategoryStatuses/central/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "channelIds":["100"],
+                                  "roomCategoryIds":["126001","126002"],
+                                  "date":"2026-05-18",
+                                  "days":1,
+                                  "pageNum":1,
+                                  "pageSize":10
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].expressValue").value("+20"))
+                .andExpect(jsonPath("$.data.roomStatusViews[0].channelRoomCategoryStatuses[0].statusViews[0].salePrice").value(21900))
+                .andExpect(jsonPath("$.data.roomStatusViews[1].channelRoomCategoryStatuses[0].expressValue").value("-30"))
+                .andExpect(jsonPath("$.data.roomStatusViews[1].channelRoomCategoryStatuses[0].statusViews[0].salePrice").value(36900));
     }
 
     @Test
@@ -400,6 +605,7 @@ class RoomCategoryStatusQueryIT {
     }
 
     private void resetRoomCategoryStatuses() {
+        ensureChannelProductCoefficientTable();
         jdbcTemplate.update("""
                 DELETE og
                 FROM order_guest og
@@ -420,6 +626,11 @@ class RoomCategoryStatusQueryIT {
                 """, CAMP_ID);
         jdbcTemplate.update("""
                 DELETE FROM room_price_snapshot
+                WHERE camp_id = ?
+                  AND room_category_id IN (126001, 126002, 126003)
+                """, CAMP_ID);
+        jdbcTemplate.update("""
+                DELETE FROM channel_product_price_coefficient
                 WHERE camp_id = ?
                   AND room_category_id IN (126001, 126002, 126003)
                 """, CAMP_ID);
@@ -489,6 +700,32 @@ class RoomCategoryStatusQueryIT {
                 WHERE camp_id = ?
                   AND room_category_id IN (126001, 126002, 126003)
                 """, CAMP_ID);
+    }
+
+    private void ensureChannelProductCoefficientTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS channel_product_price_coefficient (
+                    id BIGINT NOT NULL PRIMARY KEY,
+                    camp_id BIGINT NOT NULL,
+                    room_category_id BIGINT NOT NULL,
+                    channel_id BIGINT NOT NULL,
+                    product_name VARCHAR(255) NOT NULL,
+                    operator_type VARCHAR(8) NOT NULL,
+                    coefficient_value DECIMAL(12, 4) NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_channel_product_price_coefficient (
+                        camp_id,
+                        room_category_id,
+                        channel_id,
+                        product_name
+                    ),
+                    KEY idx_channel_product_price_coefficient_channel (
+                        camp_id,
+                        channel_id
+                    )
+                )
+                """);
     }
 
     private void resetCentralSaleStatusRoomFixtures() {

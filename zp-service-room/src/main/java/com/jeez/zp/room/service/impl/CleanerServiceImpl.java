@@ -1,11 +1,14 @@
 package com.jeez.zp.room.service.impl;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.jeez.zp.room.dto.request.CleanerPageRequest;
+import com.jeez.zp.room.dto.request.CleanerSaveRequest;
 import com.jeez.zp.room.exception.BusinessException;
 import com.jeez.zp.room.mapper.CleanTaskMapper;
 import com.jeez.zp.room.mapper.UserCampMapper;
 import com.jeez.zp.room.service.CleanerService;
 import com.jeez.zp.room.vo.CleanTaskOptionVO;
+import com.jeez.zp.room.vo.CleanerExportResponseVO;
 import com.jeez.zp.room.vo.CleanerListItemVO;
 import com.jeez.zp.room.vo.CleanerPageItemVO;
 import com.jeez.zp.room.vo.CleanerPagePaginationVO;
@@ -13,6 +16,7 @@ import com.jeez.zp.room.vo.CleanerPageQueryRowVO;
 import com.jeez.zp.room.vo.CleanerPageResponseVO;
 import com.jeez.zp.room.vo.CleanerPageStoreVO;
 import com.jeez.zp.room.vo.CleanerPageSummaryVO;
+import com.jeez.zp.room.vo.CleanerSaveResponseVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -34,6 +38,7 @@ public class CleanerServiceImpl implements CleanerService {
     private static final String STATUS_OFF_DUTY = "offDuty";
     private static final String STATUS_LEAVE = "leave";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final String MOBILE_PATTERN = "^1[3-9]\\d{9}$";
 
     private final CleanTaskMapper cleanTaskMapper;
     private final UserCampMapper userCampMapper;
@@ -71,6 +76,58 @@ public class CleanerServiceImpl implements CleanerService {
         response.setList(pageSlice.items());
         response.setPagination(toPagination(pageSlice.total(), pageNum, pageSize));
         response.setRequestBody(buildRequestBody(resolvedCampId, poiId, keyword, status, request.getServiceDate(), pageNum, pageSize));
+        return response;
+    }
+
+    @Override
+    public CleanerSaveResponseVO save(CleanerSaveRequest request, Long userId) {
+        if (request == null) {
+            throw new BusinessException(40001, "request is required");
+        }
+        Long resolvedCampId = resolveAccessibleCampId(parseLong(request.getCampId()), userId);
+        String name = requireText(request.getName(), "name");
+        String mobile = requireMobile(request.getMobile());
+        String status = normalizeStatus(request.getStatus());
+        Integer rawStatus = STATUS_OFF_DUTY.equals(status) || STATUS_LEAVE.equals(status) ? 0 : 1;
+        Long cleanerId = IdWorker.getId();
+
+        cleanTaskMapper.insertCleaner(
+                cleanerId,
+                resolvedCampId,
+                name,
+                mobile,
+                rawStatus,
+                trimToNull(request.getRoomScopeText())
+        );
+
+        CleanerSaveResponseVO response = new CleanerSaveResponseVO();
+        response.setSaved(true);
+        response.setCleanerId(String.valueOf(cleanerId));
+        return response;
+    }
+
+    @Override
+    public CleanerExportResponseVO export(CleanerPageRequest request, Long userId) {
+        CleanerPageRequest exportRequest = new CleanerPageRequest();
+        exportRequest.setCampId(request == null ? null : request.getCampId());
+        exportRequest.setPoiId(request == null ? null : request.getPoiId());
+        exportRequest.setKeyword(request == null ? null : request.getKeyword());
+        exportRequest.setStatus(request == null ? null : request.getStatus());
+        exportRequest.setServiceDate(request == null ? null : request.getServiceDate());
+        exportRequest.setPageNum(DEFAULT_PAGE_NUM);
+        exportRequest.setPageSize(Integer.MAX_VALUE);
+
+        CleanerPageResponseVO page = getPage(exportRequest, userId);
+        String exportedDate = exportRequest.getServiceDate() == null || exportRequest.getServiceDate().isBlank()
+                ? LocalDate.now().format(DATE_FORMATTER)
+                : exportRequest.getServiceDate();
+
+        CleanerExportResponseVO response = new CleanerExportResponseVO();
+        response.setTaskId("CLEANER-EXPORT-" + exportedDate.replace("-", ""));
+        response.setFileName("cleaners_" + exportedDate.replace("-", "") + ".csv");
+        response.setContentType("text/csv");
+        response.setTotal(page.getList().size());
+        response.setRows(page.getList());
         return response;
     }
 
@@ -206,6 +263,22 @@ public class CleanerServiceImpl implements CleanerService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    private String requireText(String value, String fieldName) {
+        String normalized = normalizeText(value);
+        if (normalized == null) {
+            throw new BusinessException(40001, fieldName + " is required");
+        }
+        return normalized;
+    }
+
+    private String requireMobile(String value) {
+        String mobile = requireText(value, "mobile");
+        if (!mobile.matches(MOBILE_PATTERN)) {
+            throw new BusinessException(40001, "\u624B\u673A\u53F7\u683C\u5F0F\u4E0D\u6B63\u786E");
+        }
+        return mobile;
+    }
+
     private String normalizeStatus(String status) {
         if (status == null || status.isBlank()) {
             return STATUS_ALL;
@@ -248,6 +321,10 @@ public class CleanerServiceImpl implements CleanerService {
 
     private String emptyToNull(String value) {
         return value == null || value.isBlank() ? null : value;
+    }
+
+    private String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String statusText(String status) {

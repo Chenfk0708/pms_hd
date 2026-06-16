@@ -31,6 +31,102 @@
         LIMIT 1
     </select>
 
+    <select id="selectImportedPmsOrderId" resultType="long">
+        SELECT pms_order_id
+        FROM channel_order_raw
+        WHERE account_id = #{accountId}
+          AND out_order_no = #{outOrderNo}
+          AND import_status = 'success'
+          AND pms_order_id IS NOT NULL
+        LIMIT 1
+    </select>
+
+    <select id="countPmsOrderBelongsToAccount" resultType="int">
+        SELECT COUNT(1)
+        FROM order_main
+        WHERE channel_id = #{accountId}
+          AND order_id = #{pmsOrderId}
+          AND is_deleted = 0
+    </select>
+
+    <sql id="callbackOrderWhere">
+        WHERE om.camp_id = #{campId}
+          AND om.channel_id = #{accountId}
+          AND om.is_deleted = 0
+        <if test="status != null and status != ''">
+          AND om.status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND (
+            CAST(om.order_id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+            OR om.order_no LIKE CONCAT('%', #{keyword}, '%')
+            OR om.channel_order_no_snapshot LIKE CONCAT('%', #{keyword}, '%')
+            OR om.out_order_no LIKE CONCAT('%', #{keyword}, '%')
+            OR om.guest_name LIKE CONCAT('%', #{keyword}, '%')
+            OR om.guest_mobile LIKE CONCAT('%', #{keyword}, '%')
+            OR COALESCE(p.poi_name, om.poi_name_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+            OR COALESCE(rc.name, om.room_category_name_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+            OR COALESCE(r.room_name, om.room_name_snapshot, '') LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+    </sql>
+
+    <select id="countCallbackOrders" resultType="long">
+        SELECT COUNT(1)
+        FROM order_main om
+        LEFT JOIN pms_poi p ON p.poi_id = om.poi_id
+            AND p.camp_id = om.camp_id
+            AND p.is_deleted = 0
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+            AND rc.camp_id = om.camp_id
+            AND rc.is_deleted = 0
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = om.camp_id
+            AND r.is_deleted = 0
+        <include refid="callbackOrderWhere"/>
+    </select>
+
+    <select id="selectCallbackOrders" resultType="com.jeez.zp.order.vo.ChannelCallbackOrderRowVO">
+        SELECT
+            CAST(om.order_id AS CHAR) AS orderId,
+            COALESCE(om.channel_order_no_snapshot, cor.out_order_no, om.out_order_no) AS outOrderNo,
+            om.order_no AS orderNo,
+            om.status AS status,
+            om.payment_status AS paymentStatus,
+            ca.channel_name AS channelName,
+            om.guest_name AS guestName,
+            om.guest_mobile AS guestMobile,
+            CAST(om.poi_id AS CHAR) AS poiId,
+            COALESCE(p.poi_name, om.poi_name_snapshot) AS poiName,
+            CAST(om.room_category_id AS CHAR) AS roomCategoryId,
+            COALESCE(rc.name, om.room_category_name_snapshot) AS roomCategoryName,
+            CAST(om.room_id AS CHAR) AS roomId,
+            COALESCE(r.room_name, om.room_name_snapshot) AS roomName,
+            DATE_FORMAT(om.start_at, '%Y-%m-%d %H:%i:%s') AS checkInTime,
+            DATE_FORMAT(om.end_at, '%Y-%m-%d %H:%i:%s') AS checkOutTime,
+            om.total_price_cent AS totalPrice,
+            om.total_pay_price_cent AS totalPayPrice,
+            om.commission_price_cent AS commissionPrice,
+            DATE_FORMAT(om.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt
+        FROM order_main om
+        LEFT JOIN channel_account ca ON ca.account_id = om.channel_id
+            AND ca.camp_id = om.camp_id
+        LEFT JOIN channel_order_raw cor ON cor.account_id = om.channel_id
+            AND cor.pms_order_id = om.order_id
+        LEFT JOIN pms_poi p ON p.poi_id = om.poi_id
+            AND p.camp_id = om.camp_id
+            AND p.is_deleted = 0
+        LEFT JOIN room_category rc ON rc.room_category_id = om.room_category_id
+            AND rc.camp_id = om.camp_id
+            AND rc.is_deleted = 0
+        LEFT JOIN room r ON r.room_id = om.room_id
+            AND r.camp_id = om.camp_id
+            AND r.is_deleted = 0
+        <include refid="callbackOrderWhere"/>
+        ORDER BY om.created_at DESC, om.order_id DESC
+        LIMIT #{pageSize} OFFSET #{offset}
+    </select>
+
     <select id="selectMapping" resultType="com.jeez.zp.order.vo.ChannelOrderMappingVO">
         SELECT
             ca.account_id AS accountId,

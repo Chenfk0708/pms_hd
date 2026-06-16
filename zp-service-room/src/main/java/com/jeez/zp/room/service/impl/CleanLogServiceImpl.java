@@ -5,7 +5,10 @@ import com.jeez.zp.room.mapper.CleanLogMapper;
 import com.jeez.zp.room.mapper.UserCampMapper;
 import com.jeez.zp.room.service.CleanLogService;
 import com.jeez.zp.room.vo.CleanLogExportResponseVO;
+import com.jeez.zp.room.vo.CleanLogFilterOptionsVO;
+import com.jeez.zp.room.vo.CleanLogOptionVO;
 import com.jeez.zp.room.vo.CleanLogPageDataVO;
+import com.jeez.zp.room.vo.CleanLogPaginationVO;
 import com.jeez.zp.room.vo.CleanLogRowVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,6 +18,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -41,12 +45,15 @@ public class CleanLogServiceImpl implements CleanLogService {
             Integer pageNum,
             Integer pageSize
     ) {
-        List<CleanLogRowVO> rows = selectRows(campId, userId, poiId, roomIds, operatorId, operatorStartTime, operatorEndTime);
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        List<CleanLogRowVO> rows = selectRows(resolvedCampId, poiId, roomIds, operatorId, operatorStartTime, operatorEndTime);
         PageSlice<CleanLogRowVO> pageSlice = pageSlice(rows, normalizePageNum(pageNum), normalizePageSize(pageSize));
 
         CleanLogPageDataVO response = new CleanLogPageDataVO();
         response.setTotal(pageSlice.total());
         response.setList(pageSlice.items());
+        response.setPagination(toPagination(pageSlice.total(), normalizePageNum(pageNum), normalizePageSize(pageSize)));
+        response.setDictionaries(buildFilterOptions(resolvedCampId));
         return response;
     }
 
@@ -60,7 +67,8 @@ public class CleanLogServiceImpl implements CleanLogService {
             Long operatorStartTime,
             Long operatorEndTime
     ) {
-        List<CleanLogRowVO> rows = selectRows(campId, userId, poiId, roomIds, operatorId, operatorStartTime, operatorEndTime);
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        List<CleanLogRowVO> rows = selectRows(resolvedCampId, poiId, roomIds, operatorId, operatorStartTime, operatorEndTime);
         CleanLogExportResponseVO response = new CleanLogExportResponseVO();
         response.setFileName("clean_logs_" + resolveExportDate(operatorStartTime) + ".csv");
         response.setContentType("text/csv");
@@ -70,15 +78,13 @@ public class CleanLogServiceImpl implements CleanLogService {
     }
 
     private List<CleanLogRowVO> selectRows(
-            Long campId,
-            Long userId,
+            Long resolvedCampId,
             Long poiId,
             List<String> roomIds,
             Long operatorId,
             Long operatorStartTime,
             Long operatorEndTime
     ) {
-        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
         return cleanLogMapper.selectRows(
                 resolvedCampId,
                 poiId,
@@ -87,6 +93,32 @@ public class CleanLogServiceImpl implements CleanLogService {
                 toLocalDateTime(operatorStartTime),
                 toEndExclusiveTime(operatorEndTime)
         );
+    }
+
+    private CleanLogFilterOptionsVO buildFilterOptions(Long campId) {
+        CleanLogFilterOptionsVO options = new CleanLogFilterOptionsVO();
+        options.setStores(buildStores(campId));
+        options.setRooms(cleanLogMapper.selectRooms(campId));
+        options.setOperators(cleanLogMapper.selectOperators(campId));
+        return options;
+    }
+
+    private List<CleanLogOptionVO> buildStores(Long campId) {
+        List<CleanLogOptionVO> stores = new ArrayList<>();
+        CleanLogOptionVO all = new CleanLogOptionVO();
+        all.setLabel("全部门店");
+        all.setValue("");
+        stores.add(all);
+        stores.addAll(cleanLogMapper.selectStores(campId));
+        return stores;
+    }
+
+    private CleanLogPaginationVO toPagination(long total, int pageNum, int pageSize) {
+        CleanLogPaginationVO pagination = new CleanLogPaginationVO();
+        pagination.setPage(pageNum);
+        pagination.setPageSize(pageSize);
+        pagination.setTotal(total);
+        return pagination;
     }
 
     private int normalizePageNum(Integer pageNum) {

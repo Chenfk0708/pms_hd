@@ -6,6 +6,7 @@ import lombok.Data;
 public class RoomCategoryPriceSnapshotRowVO {
 
     private String roomCategoryId;
+    private String channelId;
     private String bizDate;
     private Long priceCent;
     private String status;

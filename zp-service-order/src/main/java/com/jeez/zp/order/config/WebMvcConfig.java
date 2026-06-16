@@ -18,6 +18,11 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(gatewayTrustInterceptor)
                 .addPathPatterns("/**")
-                .excludePathPatterns("/order-service/ping", "/finance-service/ping", "/actuator/**");
+                .excludePathPatterns(
+                        "/order-service/ping",
+                        "/finance-service/ping",
+                        "/actuator/**",
+                        "/channelCallbacks/**"
+                );
     }
 }

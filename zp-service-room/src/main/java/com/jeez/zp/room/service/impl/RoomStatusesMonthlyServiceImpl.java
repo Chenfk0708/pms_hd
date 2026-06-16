@@ -2,10 +2,12 @@ package com.jeez.zp.room.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.jeez.zp.room.dto.request.RoomStatusCloseRequest;
+import com.jeez.zp.room.dto.request.RoomStatusCleanRequest;
 import com.jeez.zp.room.exception.BusinessException;
 import com.jeez.zp.room.mapper.RoomStatusesMonthlyMapper;
 import com.jeez.zp.room.mapper.UserCampMapper;
 import com.jeez.zp.room.service.RoomStatusesMonthlyService;
+import com.jeez.zp.room.vo.RoomStatusCleanResponseVO;
 import com.jeez.zp.room.vo.RoomStatusCloseResponseVO;
 import com.jeez.zp.room.vo.RoomStatusCloseRoomMetaVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyBlockVO;
@@ -33,6 +35,8 @@ public class RoomStatusesMonthlyServiceImpl implements RoomStatusesMonthlyServic
     private static final int DEFAULT_DAYS = 30;
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final String ROOM_CLEAN_STATUS_DIRTY = "dirty";
+    private static final String ROOM_CLEAN_STATUS_CLEAN = "clean";
 
     private final RoomStatusesMonthlyMapper roomStatusesMonthlyMapper;
     private final UserCampMapper userCampMapper;
@@ -132,6 +136,36 @@ public class RoomStatusesMonthlyServiceImpl implements RoomStatusesMonthlyServic
         return listResponse(roomStatusesMonthlyMapper.selectInventoryRows(
                 query.campId(), query.startDate(), query.endDate(), query.roomCategoryIds(), query.poiIds(), query.keyword()
         ));
+    }
+
+    @Override
+    @Transactional
+    public RoomStatusCleanResponseVO saveRoomCleanStatus(RoomStatusCleanRequest request, Long userId) {
+        if (request == null) {
+            throw new BusinessException(40001, "request is required");
+        }
+        Long campId = resolveAccessibleCampId(parseRequiredLong(request.getCampId(), "campId"), userId);
+        Long roomCategoryId = parseRequiredLong(request.getRoomCategoryId(), "roomCategoryId");
+        Long roomId = parseRequiredLong(request.getRoomId(), "roomId");
+        String cleanStatus = normalizeRoomCleanStatus(request.getCleanStatus());
+
+        RoomStatusCloseRoomMetaVO roomMeta = roomStatusesMonthlyMapper.selectCloseRoomMeta(campId, roomCategoryId, roomId);
+        if (roomMeta == null) {
+            throw new BusinessException(40401, "room is not available");
+        }
+
+        int updated = roomStatusesMonthlyMapper.updateRoomCleanStatus(campId, roomId, cleanStatus, userId);
+        if (updated != 1) {
+            throw new BusinessException(40401, "room is not available");
+        }
+
+        RoomStatusCleanResponseVO response = new RoomStatusCleanResponseVO();
+        response.setRoomCategoryId(String.valueOf(roomCategoryId));
+        response.setRoomId(String.valueOf(roomId));
+        response.setCleanStatus(cleanStatus);
+        response.setIsDirty(ROOM_CLEAN_STATUS_DIRTY.equals(cleanStatus) ? 1 : 0);
+        response.setMessage(ROOM_CLEAN_STATUS_DIRTY.equals(cleanStatus) ? "room marked dirty" : "room marked clean");
+        return response;
     }
 
     @Override
@@ -334,6 +368,18 @@ public class RoomStatusesMonthlyServiceImpl implements RoomStatusesMonthlyServic
 
     private String defaultString(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private String normalizeRoomCleanStatus(String cleanStatus) {
+        String normalized = trimToNull(cleanStatus);
+        if (normalized == null) {
+            throw new BusinessException(40001, "cleanStatus is required");
+        }
+        normalized = normalized.toLowerCase();
+        if (!ROOM_CLEAN_STATUS_DIRTY.equals(normalized) && !ROOM_CLEAN_STATUS_CLEAN.equals(normalized)) {
+            throw new BusinessException(40001, "cleanStatus must be dirty or clean");
+        }
+        return normalized;
     }
 
     private String trimToNull(String value) {

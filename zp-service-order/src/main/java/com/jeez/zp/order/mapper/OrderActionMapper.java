@@ -141,6 +141,40 @@ public interface OrderActionMapper {
             @Param("userId") Long userId
     );
 
+    int updateRoomCleanStatus(
+            @Param("campId") Long campId,
+            @Param("roomId") Long roomId,
+            @Param("cleanStatus") String cleanStatus
+    );
+
+    int countOpenCheckoutCleanTasks(
+            @Param("campId") Long campId,
+            @Param("roomId") Long roomId
+    );
+
+    int insertCheckoutCleanTask(
+            @Param("cleanTaskId") Long cleanTaskId,
+            @Param("campId") Long campId,
+            @Param("poiId") Long poiId,
+            @Param("roomId") Long roomId,
+            @Param("roomCategoryId") Long roomCategoryId,
+            @Param("deadlineAt") LocalDateTime deadlineAt,
+            @Param("remark") String remark
+    );
+
+    int insertCleanLog(
+            @Param("cleanLogId") Long cleanLogId,
+            @Param("campId") Long campId,
+            @Param("poiId") Long poiId,
+            @Param("roomId") Long roomId,
+            @Param("roomCategoryId") Long roomCategoryId,
+            @Param("cleanTaskId") Long cleanTaskId,
+            @Param("cleanStaffId") Long cleanStaffId,
+            @Param("operatorId") Long operatorId,
+            @Param("actionType") String actionType,
+            @Param("actionDetail") String actionDetail
+    );
+
     int updateGuestRegisteredAt(
             @Param("campId") Long campId,
             @Param("orderId") Long orderId,

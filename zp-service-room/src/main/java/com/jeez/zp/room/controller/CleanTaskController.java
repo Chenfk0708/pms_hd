@@ -2,6 +2,7 @@ package com.jeez.zp.room.controller;
 
 import com.jeez.zp.room.api.HudsonResponse;
 import com.jeez.zp.room.api.TraceIdFactory;
+import com.jeez.zp.room.dto.request.CleanTaskActionRequest;
 import com.jeez.zp.room.dto.request.CleanTaskCreateRequest;
 import com.jeez.zp.room.dto.request.CleanTaskNotifyRequest;
 import com.jeez.zp.room.dto.request.CleanTaskPageRequest;
@@ -66,6 +67,59 @@ public class CleanTaskController {
         return HudsonResponse.success(
                 cleanTaskService.notify(parseLong(request.getCampId()), LoginUserContext.requiredUserId(), request.getTaskIds()),
                 TraceIdFactory.next("clean-task-notify")
+        );
+    }
+
+    @PostMapping("/cleanTask/assign")
+    public HudsonResponse<CleanTaskActionResponseVO> assign(@RequestBody CleanTaskActionRequest request) {
+        return HudsonResponse.success(
+                cleanTaskService.assign(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getTaskId(),
+                        request.getCleanerId(),
+                        request.getRemark()
+                ),
+                TraceIdFactory.next("clean-task-assign")
+        );
+    }
+
+    @PostMapping("/cleanTask/start")
+    public HudsonResponse<CleanTaskActionResponseVO> start(@RequestBody CleanTaskActionRequest request) {
+        return HudsonResponse.success(
+                cleanTaskService.start(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getTaskId(),
+                        request.getRemark()
+                ),
+                TraceIdFactory.next("clean-task-start")
+        );
+    }
+
+    @PostMapping("/cleanTask/complete")
+    public HudsonResponse<CleanTaskActionResponseVO> complete(@RequestBody CleanTaskActionRequest request) {
+        return HudsonResponse.success(
+                cleanTaskService.complete(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getTaskId(),
+                        request.getRemark()
+                ),
+                TraceIdFactory.next("clean-task-complete")
+        );
+    }
+
+    @PostMapping("/cleanTask/cancel")
+    public HudsonResponse<CleanTaskActionResponseVO> cancel(@RequestBody CleanTaskActionRequest request) {
+        return HudsonResponse.success(
+                cleanTaskService.cancel(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getTaskId(),
+                        request.getRemark()
+                ),
+                TraceIdFactory.next("clean-task-cancel")
         );
     }
 

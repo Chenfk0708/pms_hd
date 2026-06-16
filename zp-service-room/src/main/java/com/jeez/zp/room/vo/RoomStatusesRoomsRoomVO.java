@@ -8,4 +8,6 @@ public class RoomStatusesRoomsRoomVO {
     private String roomCategoryId;
     private String roomId;
     private String roomName;
+    private String cleanStatus;
+    private Integer isDirty;
 }

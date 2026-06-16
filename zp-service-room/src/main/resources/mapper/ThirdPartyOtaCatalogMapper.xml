@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jeez.zp.room.mapper.ThirdPartyOtaCatalogMapper">
+
+    <sql id="poiFilters">
+        WHERE p.camp_id = #{campId}
+          AND p.status = 1
+          AND p.is_deleted = 0
+          AND EXISTS (
+              SELECT 1
+              FROM channel_poi_rel rel
+              JOIN channel_account ca ON ca.account_id = rel.account_id
+                  AND ca.camp_id = rel.camp_id
+              WHERE rel.camp_id = p.camp_id
+                AND rel.poi_id = p.poi_id
+                AND rel.sync_status = 'synced'
+                AND JSON_UNQUOTE(JSON_EXTRACT(ca.config_json, '$.channelCode')) = #{channelCode}
+          )
+        <if test="keyword != null and keyword != ''">
+          AND (
+              p.poi_name LIKE CONCAT('%', #{keyword}, '%')
+              OR p.address LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+    </sql>
+
+    <select id="countPois" resultType="long">
+        SELECT COUNT(1)
+        FROM pms_poi p
+        <include refid="poiFilters"/>
+    </select>
+
+    <select id="selectPois" resultType="com.jeez.zp.room.vo.ThirdPartyOtaPoiVO">
+        SELECT
+            CAST(p.poi_id AS CHAR) AS poiId,
+            rel.out_poi_id AS outPoiId,
+            p.poi_name AS poiName,
+            p.address AS address,
+            CASE WHEN p.status = 1 THEN 'enabled' ELSE 'disabled' END AS status
+        FROM pms_poi p
+        JOIN channel_poi_rel rel ON rel.camp_id = p.camp_id
+            AND rel.poi_id = p.poi_id
+            AND rel.sync_status = 'synced'
+        JOIN channel_account ca ON ca.account_id = rel.account_id
+            AND ca.camp_id = rel.camp_id
+            AND JSON_UNQUOTE(JSON_EXTRACT(ca.config_json, '$.channelCode')) = #{channelCode}
+        <include refid="poiFilters"/>
+        ORDER BY p.poi_id ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+</mapper>

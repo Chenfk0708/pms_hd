@@ -26,3 +26,8 @@ management:
 order:
   security:
     id-card-secret: ${ORDER_ID_CARD_SECRET:}
+
+jeez:
+  channel:
+    callback:
+      test-token: ${CHANNEL_CALLBACK_TEST_TOKEN:test123}

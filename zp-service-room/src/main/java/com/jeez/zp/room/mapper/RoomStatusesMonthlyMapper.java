@@ -103,6 +103,13 @@ public interface RoomStatusesMonthlyMapper {
             @Param("roomCategoryId") Long roomCategoryId
     );
 
+    int updateRoomCleanStatus(
+            @Param("campId") Long campId,
+            @Param("roomId") Long roomId,
+            @Param("cleanStatus") String cleanStatus,
+            @Param("userId") Long userId
+    );
+
     List<RoomStatusesMonthlyBlockVO> selectBlockRows(
             @Param("campId") Long campId,
             @Param("startDate") LocalDate startDate,

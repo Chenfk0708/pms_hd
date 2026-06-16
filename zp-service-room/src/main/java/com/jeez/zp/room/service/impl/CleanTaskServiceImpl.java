@@ -7,6 +7,7 @@ import com.jeez.zp.room.mapper.CleanTaskMapper;
 import com.jeez.zp.room.mapper.UserCampMapper;
 import com.jeez.zp.room.service.CleanTaskService;
 import com.jeez.zp.room.vo.CleanTaskActionResponseVO;
+import com.jeez.zp.room.vo.CleanTaskActionRowVO;
 import com.jeez.zp.room.vo.CleanTaskDashboardResponseVO;
 import com.jeez.zp.room.vo.CleanTaskExportResponseVO;
 import com.jeez.zp.room.vo.CleanTaskOptionVO;
@@ -56,6 +57,13 @@ public class CleanTaskServiceImpl implements CleanTaskService {
     private static final String STATUS_CLEANING = "CLEANING";
     private static final String STATUS_DONE = "DONE";
     private static final String STATUS_CANCELLED = "CANCELLED";
+    private static final String TASK_STATUS_PENDING = "pending";
+    private static final String TASK_STATUS_PROCESSING = "processing";
+    private static final String TASK_STATUS_DONE = "done";
+    private static final String TASK_STATUS_CANCELLED = "cancelled";
+    private static final String ROOM_CLEAN_STATUS_DIRTY = "dirty";
+    private static final String ROOM_CLEAN_STATUS_CLEANING = "cleaning";
+    private static final String ROOM_CLEAN_STATUS_CLEAN = "clean";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
@@ -145,6 +153,18 @@ public class CleanTaskServiceImpl implements CleanTaskService {
                 parseDeadlineAt(request.getDeadlineAt(), request.getCleanTime(), request.getDeadline()),
                 trimToNull(request.getRemark())
         );
+        cleanTaskMapper.updateRoomCleanStatus(resolvedCampId, room.getRoomId(), ROOM_CLEAN_STATUS_DIRTY);
+        insertCleanLog(
+                resolvedCampId,
+                room.getPoiId(),
+                room.getRoomId(),
+                room.getRoomCategoryId(),
+                cleanTaskId,
+                cleanStaffId,
+                userId,
+                "create",
+                trimToNull(request.getRemark())
+        );
 
         CleanTaskActionResponseVO response = new CleanTaskActionResponseVO();
         response.setTaskId(String.valueOf(cleanTaskId));
@@ -167,12 +187,83 @@ public class CleanTaskServiceImpl implements CleanTaskService {
         if (notifiedCount != parsedTaskIds.size()) {
             throw new BusinessException(40001, "\u5DF2\u5B8C\u6210\u6216\u5DF2\u53D6\u6D88\u7684\u4FDD\u6D01\u4EFB\u52A1\u4E0D\u80FD\u901A\u77E5");
         }
+        for (Long taskId : parsedTaskIds) {
+            CleanTaskActionRowVO row = requireTask(resolvedCampId, taskId);
+            insertCleanLog(row, userId, "notify", "保洁任务已通知");
+        }
 
         CleanTaskActionResponseVO response = new CleanTaskActionResponseVO();
         response.setNotifiedCount(notifiedCount);
         response.setTaskIds(existingTaskIds);
         response.setMessage("\u4FDD\u6D01\u4EFB\u52A1\u901A\u77E5\u6210\u529F");
         return response;
+    }
+
+    @Override
+    @Transactional
+    public CleanTaskActionResponseVO assign(Long campId, Long userId, String taskId, String cleanerId, String remark) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        Long parsedTaskId = parseRequiredLong(taskId, "taskId");
+        Long cleanStaffId = resolveCleanStaffId(resolvedCampId, cleanerId, STATUS_PENDING_CLEAN);
+        if (cleanStaffId == null) {
+            throw new BusinessException(40001, "cleanerId is required");
+        }
+
+        CleanTaskActionRowVO row = requireTask(resolvedCampId, parsedTaskId);
+        ensureTaskNotFinished(row);
+        int updated = cleanTaskMapper.updateCleanTaskAssignment(resolvedCampId, parsedTaskId, cleanStaffId, trimToNull(remark));
+        if (updated != 1) {
+            throw new BusinessException(40001, "已完成或已取消的保洁任务不能分配");
+        }
+        row.setCleanStaffId(cleanStaffId);
+        insertCleanLog(row, userId, "assign", trimToNull(remark));
+        return actionResponse(parsedTaskId, STATUS_PENDING_CLEAN, "保洁任务分配成功");
+    }
+
+    @Override
+    @Transactional
+    public CleanTaskActionResponseVO start(Long campId, Long userId, String taskId, String remark) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        Long parsedTaskId = parseRequiredLong(taskId, "taskId");
+        CleanTaskActionRowVO row = requireTask(resolvedCampId, parsedTaskId);
+        if (!TASK_STATUS_PENDING.equals(row.getTaskStatus())) {
+            throw new BusinessException(40001, "只有待保洁任务可以开始保洁");
+        }
+        if (row.getCleanStaffId() == null) {
+            throw new BusinessException(40001, "请先分配保洁员");
+        }
+
+        updateTaskAndRoom(row, TASK_STATUS_PROCESSING, ROOM_CLEAN_STATUS_CLEANING, trimToNull(remark));
+        insertCleanLog(row, userId, "start", trimToNull(remark));
+        return actionResponse(parsedTaskId, STATUS_CLEANING, "保洁任务已开始");
+    }
+
+    @Override
+    @Transactional
+    public CleanTaskActionResponseVO complete(Long campId, Long userId, String taskId, String remark) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        Long parsedTaskId = parseRequiredLong(taskId, "taskId");
+        CleanTaskActionRowVO row = requireTask(resolvedCampId, parsedTaskId);
+        if (!TASK_STATUS_PROCESSING.equals(row.getTaskStatus())) {
+            throw new BusinessException(40001, "只有保洁中的任务可以完成");
+        }
+
+        updateTaskAndRoom(row, TASK_STATUS_DONE, ROOM_CLEAN_STATUS_CLEAN, trimToNull(remark));
+        insertCleanLog(row, userId, "complete", trimToNull(remark));
+        return actionResponse(parsedTaskId, STATUS_DONE, "保洁任务已完成");
+    }
+
+    @Override
+    @Transactional
+    public CleanTaskActionResponseVO cancel(Long campId, Long userId, String taskId, String remark) {
+        Long resolvedCampId = resolveAccessibleCampId(campId, userId);
+        Long parsedTaskId = parseRequiredLong(taskId, "taskId");
+        CleanTaskActionRowVO row = requireTask(resolvedCampId, parsedTaskId);
+        ensureTaskNotFinished(row);
+
+        cleanTaskMapper.updateCleanTaskStatus(resolvedCampId, parsedTaskId, TASK_STATUS_CANCELLED, trimToNull(remark));
+        insertCleanLog(row, userId, "cancel", trimToNull(remark));
+        return actionResponse(parsedTaskId, STATUS_CANCELLED, "保洁任务已取消");
     }
 
     @Override
@@ -342,6 +433,82 @@ public class CleanTaskServiceImpl implements CleanTaskService {
         appendQueryParam(url, "cleanStartTime", cleanStartTime);
         appendQueryParam(url, "cleanEndTime", cleanEndTime);
         return url.toString();
+    }
+
+    private CleanTaskActionRowVO requireTask(Long campId, Long cleanTaskId) {
+        CleanTaskActionRowVO row = cleanTaskMapper.selectTaskForUpdate(campId, cleanTaskId);
+        if (row == null) {
+            throw new BusinessException(40401, "保洁任务不存在");
+        }
+        return row;
+    }
+
+    private void ensureTaskNotFinished(CleanTaskActionRowVO row) {
+        if (TASK_STATUS_DONE.equals(row.getTaskStatus()) || TASK_STATUS_CANCELLED.equals(row.getTaskStatus())) {
+            throw new BusinessException(40001, "已完成或已取消的保洁任务不能操作");
+        }
+    }
+
+    private void updateTaskAndRoom(
+            CleanTaskActionRowVO row,
+            String taskStatus,
+            String roomCleanStatus,
+            String remark
+    ) {
+        int updated = cleanTaskMapper.updateCleanTaskStatus(row.getCampId(), row.getCleanTaskId(), taskStatus, remark);
+        if (updated != 1) {
+            throw new BusinessException(40401, "保洁任务不存在");
+        }
+        cleanTaskMapper.updateRoomCleanStatus(row.getCampId(), row.getRoomId(), roomCleanStatus);
+        row.setTaskStatus(taskStatus);
+    }
+
+    private CleanTaskActionResponseVO actionResponse(Long taskId, String cleanStatus, String message) {
+        CleanTaskActionResponseVO response = new CleanTaskActionResponseVO();
+        response.setTaskId(String.valueOf(taskId));
+        response.setTaskNo("CT" + taskId);
+        response.setCleanStatus(cleanStatus);
+        response.setMessage(message);
+        return response;
+    }
+
+    private void insertCleanLog(CleanTaskActionRowVO row, Long operatorId, String actionType, String actionDetail) {
+        insertCleanLog(
+                row.getCampId(),
+                row.getPoiId(),
+                row.getRoomId(),
+                row.getRoomCategoryId(),
+                row.getCleanTaskId(),
+                row.getCleanStaffId(),
+                operatorId,
+                actionType,
+                actionDetail
+        );
+    }
+
+    private void insertCleanLog(
+            Long campId,
+            Long poiId,
+            Long roomId,
+            Long roomCategoryId,
+            Long cleanTaskId,
+            Long cleanStaffId,
+            Long operatorId,
+            String actionType,
+            String actionDetail
+    ) {
+        cleanTaskMapper.insertCleanLog(
+                IdWorker.getId(),
+                campId,
+                poiId,
+                roomId,
+                roomCategoryId,
+                cleanTaskId,
+                cleanStaffId,
+                operatorId,
+                actionType,
+                actionDetail
+        );
     }
 
     private void appendQueryParam(StringBuilder url, String name, Long value) {

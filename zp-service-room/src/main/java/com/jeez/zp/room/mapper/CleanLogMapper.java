@@ -1,6 +1,8 @@
 package com.jeez.zp.room.mapper;
 
 import com.jeez.zp.room.vo.CleanLogRowVO;
+import com.jeez.zp.room.vo.CleanLogOptionVO;
+import com.jeez.zp.room.vo.CleanLogRoomOptionVO;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
@@ -16,4 +18,10 @@ public interface CleanLogMapper {
             @Param("operatorStartTime") LocalDateTime operatorStartTime,
             @Param("operatorEndExclusiveTime") LocalDateTime operatorEndExclusiveTime
     );
+
+    List<CleanLogOptionVO> selectStores(@Param("campId") Long campId);
+
+    List<CleanLogRoomOptionVO> selectRooms(@Param("campId") Long campId);
+
+    List<CleanLogOptionVO> selectOperators(@Param("campId") Long campId);
 }

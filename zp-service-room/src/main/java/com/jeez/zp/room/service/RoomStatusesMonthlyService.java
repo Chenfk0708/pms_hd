@@ -1,6 +1,8 @@
 package com.jeez.zp.room.service;
 
 import com.jeez.zp.room.dto.request.RoomStatusCloseRequest;
+import com.jeez.zp.room.dto.request.RoomStatusCleanRequest;
+import com.jeez.zp.room.vo.RoomStatusCleanResponseVO;
 import com.jeez.zp.room.vo.RoomStatusCloseResponseVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyBlockVO;
 import com.jeez.zp.room.vo.RoomStatusesMonthlyDailyMonitorVO;
@@ -17,6 +19,8 @@ public interface RoomStatusesMonthlyService {
     RoomStatusCloseResponseVO closeRoom(RoomStatusCloseRequest request, Long userId);
 
     RoomStatusCloseResponseVO openRoom(RoomStatusCloseRequest request, Long userId);
+
+    RoomStatusCleanResponseVO saveRoomCleanStatus(RoomStatusCleanRequest request, Long userId);
 
     RoomStatusesMonthlyListResponseVO<RoomStatusesMonthlyInventoryVO> getInventory(
             Long campId,

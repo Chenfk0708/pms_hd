@@ -41,6 +41,11 @@ class CleanTaskActionIT {
         resetCleanData();
         RoomCleanTestCatalogFixture.ensureBaseCatalog(jdbcTemplate);
         insertCleanStaff(128301L, "Action Cleaner A", "13800001301");
+        jdbcTemplate.update(
+                "UPDATE room SET clean_status = 'clean' WHERE camp_id = ? AND room_id = ?",
+                CAMP_ID,
+                23002L
+        );
 
         mockMvc.perform(post("/cleanTask/create")
                         .header(AUTH_VERIFIED_HEADER, "true")
@@ -83,6 +88,113 @@ class CleanTaskActionIT {
                 CAMP_ID
         );
         assertEquals(1, created);
+
+        String roomCleanStatus = jdbcTemplate.queryForObject(
+                "SELECT clean_status FROM room WHERE camp_id = ? AND room_id = ?",
+                String.class,
+                CAMP_ID,
+                23002L
+        );
+        assertEquals("dirty", roomCleanStatus);
+
+        Integer logCount = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(1)
+                        FROM clean_log cl
+                        JOIN clean_task ct ON ct.clean_task_id = cl.clean_task_id
+                        WHERE cl.camp_id = ?
+                          AND ct.room_id = 23002
+                          AND cl.action_type = 'create'
+                        """,
+                Integer.class,
+                CAMP_ID
+        );
+        assertEquals(1, logCount);
+    }
+
+    @Test
+    @Timeout(60)
+    void cleanTaskActions_shouldMoveTaskThroughAssignmentCleaningAndCompletion() throws Exception {
+        resetCleanData();
+        RoomCleanTestCatalogFixture.ensureBaseCatalog(jdbcTemplate);
+        insertCleanStaff(128301L, "Action Cleaner A", "13800001301");
+        insertCleanTask(128305L, 11001L, 23002L, 22001L, null, "checkout_clean", "pending", 0, "action target", "2026-05-19 10:00:00");
+        jdbcTemplate.update(
+                "UPDATE room SET clean_status = 'dirty' WHERE camp_id = ? AND room_id = ?",
+                CAMP_ID,
+                23002L
+        );
+
+        mockMvc.perform(post("/cleanTask/assign")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "taskId":"128305",
+                                  "cleanerId":"128301",
+                                  "remark":"assign for action test"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.taskId").value("128305"))
+                .andExpect(jsonPath("$.data.cleanStatus").value("PENDING_CLEAN"));
+
+        Long assignedCleanerId = jdbcTemplate.queryForObject(
+                "SELECT clean_staff_id FROM clean_task WHERE clean_task_id = ?",
+                Long.class,
+                128305L
+        );
+        assertEquals(128301L, assignedCleanerId);
+
+        mockMvc.perform(post("/cleanTask/start")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "taskId":"128305",
+                                  "remark":"start cleaning"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.cleanStatus").value("CLEANING"));
+
+        assertEquals("processing", taskStatus(128305L));
+        assertEquals("cleaning", roomCleanStatus(23002L));
+
+        mockMvc.perform(post("/cleanTask/complete")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "taskId":"128305",
+                                  "remark":"complete cleaning"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.cleanStatus").value("DONE"));
+
+        assertEquals("done", taskStatus(128305L));
+        assertEquals("clean", roomCleanStatus(23002L));
+
+        Integer logCount = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(1)
+                        FROM clean_log
+                        WHERE camp_id = ?
+                          AND clean_task_id = 128305
+                          AND action_type IN ('assign', 'start', 'complete')
+                        """,
+                Integer.class,
+                CAMP_ID
+        );
+        assertEquals(3, logCount);
     }
 
     @Test
@@ -152,8 +264,48 @@ class CleanTaskActionIT {
     }
 
     private void resetCleanData() {
+        ensureCleanLogTable();
+        jdbcTemplate.update("DELETE FROM clean_log WHERE camp_id = ?", CAMP_ID);
         jdbcTemplate.update("DELETE FROM clean_task WHERE camp_id = ?", CAMP_ID);
         jdbcTemplate.update("DELETE FROM clean_staff WHERE camp_id = ?", CAMP_ID);
+    }
+
+    private void ensureCleanLogTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS clean_log (
+                  clean_log_id BIGINT UNSIGNED NOT NULL,
+                  camp_id BIGINT UNSIGNED NOT NULL,
+                  poi_id BIGINT UNSIGNED NOT NULL,
+                  room_id BIGINT UNSIGNED NOT NULL,
+                  room_category_id BIGINT UNSIGNED NOT NULL,
+                  clean_task_id BIGINT UNSIGNED NOT NULL,
+                  clean_staff_id BIGINT UNSIGNED DEFAULT NULL,
+                  operator_id BIGINT UNSIGNED DEFAULT NULL,
+                  action_type VARCHAR(32) NOT NULL,
+                  action_detail VARCHAR(255) DEFAULT NULL,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (clean_log_id),
+                  KEY idx_clean_log_task_created_at (clean_task_id, created_at),
+                  KEY idx_clean_log_camp_created_at (camp_id, created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+                """);
+    }
+
+    private String taskStatus(long cleanTaskId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT task_status FROM clean_task WHERE clean_task_id = ?",
+                String.class,
+                cleanTaskId
+        );
+    }
+
+    private String roomCleanStatus(long roomId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT clean_status FROM room WHERE camp_id = ? AND room_id = ?",
+                String.class,
+                CAMP_ID,
+                roomId
+        );
     }
 
     private void insertCleanStaff(long cleanStaffId, String name, String mobile) {

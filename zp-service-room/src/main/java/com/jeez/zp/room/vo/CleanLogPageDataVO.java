@@ -9,4 +9,6 @@ public class CleanLogPageDataVO {
 
     private Long total;
     private List<CleanLogRowVO> list;
+    private CleanLogPaginationVO pagination;
+    private CleanLogFilterOptionsVO dictionaries;
 }

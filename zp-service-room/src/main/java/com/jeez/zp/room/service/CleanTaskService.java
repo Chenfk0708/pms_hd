@@ -29,6 +29,14 @@ public interface CleanTaskService {
 
     CleanTaskActionResponseVO notify(Long campId, Long userId, List<String> taskIds);
 
+    CleanTaskActionResponseVO assign(Long campId, Long userId, String taskId, String cleanerId, String remark);
+
+    CleanTaskActionResponseVO start(Long campId, Long userId, String taskId, String remark);
+
+    CleanTaskActionResponseVO complete(Long campId, Long userId, String taskId, String remark);
+
+    CleanTaskActionResponseVO cancel(Long campId, Long userId, String taskId, String remark);
+
     CleanTaskExportResponseVO export(
             Long campId,
             Long userId,

@@ -2,6 +2,7 @@ package com.jeez.zp.order.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.jeez.common.utils.InputValidationUtils;
 import com.jeez.zp.order.dto.request.OrderCreateRequest;
 import com.jeez.zp.order.dto.request.OrderCreateRoomItemRequest;
@@ -37,6 +38,8 @@ public class OrderActionServiceImpl implements OrderActionService {
     private static final String STATUS_COMPLETED = "completed";
     private static final String STATUS_CANCELLED = "cancelled";
     private static final String STATUS_NO_SHOW = "no_show";
+    private static final String ROOM_CLEAN_STATUS_DIRTY = "dirty";
+    private static final String CLEAN_LOG_ACTION_CHECKOUT_AUTO_CREATE = "checkout_auto_create";
     private static final String DEFAULT_LOCAL_CHANNEL_NAME = "宿银平台";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -214,7 +217,43 @@ public class OrderActionServiceImpl implements OrderActionService {
         }
         LocalDateTime checkedOutAt = LocalDateTime.now();
         updateStatus(resolvedCampId, orderId, STATUS_COMPLETED, "paid", null, null, checkedOutAt, userId);
+        createCheckoutCleanTaskIfNeeded(row, checkedOutAt, userId);
         return response(orderId, STATUS_COMPLETED, null, "办理退房成功");
+    }
+
+    private void createCheckoutCleanTaskIfNeeded(OrderActionRowVO row, LocalDateTime checkedOutAt, Long userId) {
+        if (row.getRoomId() == null || row.getRoomCategoryId() == null || row.getPoiId() == null) {
+            return;
+        }
+        orderActionMapper.updateRoomCleanStatus(row.getCampId(), row.getRoomId(), ROOM_CLEAN_STATUS_DIRTY);
+        if (orderActionMapper.countOpenCheckoutCleanTasks(row.getCampId(), row.getRoomId()) > 0) {
+            return;
+        }
+
+        Long cleanTaskId = IdWorker.getId();
+        LocalDateTime deadlineAt = checkedOutAt.plusHours(2);
+        String detail = "退房自动派单：订单 " + row.getOrderId();
+        orderActionMapper.insertCheckoutCleanTask(
+                cleanTaskId,
+                row.getCampId(),
+                row.getPoiId(),
+                row.getRoomId(),
+                row.getRoomCategoryId(),
+                deadlineAt,
+                detail
+        );
+        orderActionMapper.insertCleanLog(
+                IdWorker.getId(),
+                row.getCampId(),
+                row.getPoiId(),
+                row.getRoomId(),
+                row.getRoomCategoryId(),
+                cleanTaskId,
+                null,
+                userId,
+                CLEAN_LOG_ACTION_CHECKOUT_AUTO_CREATE,
+                detail
+        );
     }
 
     @Override

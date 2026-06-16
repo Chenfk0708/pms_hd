@@ -4,6 +4,7 @@ import com.jeez.zp.order.vo.ChannelOrderAccountVO;
 import com.jeez.zp.order.vo.ChannelOrderAvailableRoomVO;
 import com.jeez.zp.order.vo.ChannelOrderMappingVO;
 import com.jeez.zp.order.vo.ChannelOrderRawVO;
+import com.jeez.zp.order.vo.ChannelCallbackOrderRowVO;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDate;
@@ -17,6 +18,32 @@ public interface ChannelOrderMapper {
     ChannelOrderRawVO selectRawByExternalOrder(
             @Param("accountId") Long accountId,
             @Param("outOrderNo") String outOrderNo
+    );
+
+    Long selectImportedPmsOrderId(
+            @Param("accountId") Long accountId,
+            @Param("outOrderNo") String outOrderNo
+    );
+
+    Integer countPmsOrderBelongsToAccount(
+            @Param("accountId") Long accountId,
+            @Param("pmsOrderId") Long pmsOrderId
+    );
+
+    long countCallbackOrders(
+            @Param("campId") Long campId,
+            @Param("accountId") Long accountId,
+            @Param("keyword") String keyword,
+            @Param("status") String status
+    );
+
+    List<ChannelCallbackOrderRowVO> selectCallbackOrders(
+            @Param("campId") Long campId,
+            @Param("accountId") Long accountId,
+            @Param("keyword") String keyword,
+            @Param("status") String status,
+            @Param("offset") long offset,
+            @Param("pageSize") int pageSize
     );
 
     ChannelOrderMappingVO selectMapping(

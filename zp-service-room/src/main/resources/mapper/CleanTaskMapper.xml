@@ -219,6 +219,30 @@
           AND cs.is_deleted = 0
     </select>
 
+    <insert id="insertCleaner">
+        INSERT INTO clean_staff (
+            clean_staff_id,
+            camp_id,
+            name,
+            mobile,
+            status,
+            remark,
+            is_deleted,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{cleanStaffId},
+            #{campId},
+            #{name},
+            #{mobile},
+            #{status},
+            #{remark},
+            0,
+            NOW(),
+            NOW()
+        )
+    </insert>
+
     <insert id="insertCleanTask">
         INSERT INTO clean_task (
             clean_task_id,
@@ -247,6 +271,79 @@
             0,
             #{remark},
             NOW(),
+            NOW()
+        )
+    </insert>
+
+    <select id="selectTaskForUpdate" resultType="com.jeez.zp.room.vo.CleanTaskActionRowVO">
+        SELECT
+            ct.clean_task_id AS cleanTaskId,
+            ct.camp_id AS campId,
+            ct.poi_id AS poiId,
+            ct.room_id AS roomId,
+            ct.room_category_id AS roomCategoryId,
+            ct.clean_staff_id AS cleanStaffId,
+            ct.task_type AS taskType,
+            ct.task_status AS taskStatus,
+            ct.remark AS remark
+        FROM clean_task ct
+        WHERE ct.camp_id = #{campId}
+          AND ct.clean_task_id = #{cleanTaskId}
+        FOR UPDATE
+    </select>
+
+    <update id="updateCleanTaskAssignment">
+        UPDATE clean_task
+        SET clean_staff_id = #{cleanStaffId},
+            remark = COALESCE(#{remark}, remark),
+            updated_at = NOW()
+        WHERE camp_id = #{campId}
+          AND clean_task_id = #{cleanTaskId}
+          AND task_status = 'pending'
+    </update>
+
+    <update id="updateCleanTaskStatus">
+        UPDATE clean_task
+        SET task_status = #{taskStatus},
+            remark = COALESCE(#{remark}, remark),
+            updated_at = NOW()
+        WHERE camp_id = #{campId}
+          AND clean_task_id = #{cleanTaskId}
+    </update>
+
+    <update id="updateRoomCleanStatus">
+        UPDATE room
+        SET clean_status = #{cleanStatus},
+            updated_at = NOW()
+        WHERE camp_id = #{campId}
+          AND room_id = #{roomId}
+          AND is_deleted = 0
+    </update>
+
+    <insert id="insertCleanLog">
+        INSERT INTO clean_log (
+            clean_log_id,
+            camp_id,
+            poi_id,
+            room_id,
+            room_category_id,
+            clean_task_id,
+            clean_staff_id,
+            operator_id,
+            action_type,
+            action_detail,
+            created_at
+        ) VALUES (
+            #{cleanLogId},
+            #{campId},
+            #{poiId},
+            #{roomId},
+            #{roomCategoryId},
+            #{cleanTaskId},
+            #{cleanStaffId},
+            #{operatorId},
+            #{actionType},
+            #{actionDetail},
             NOW()
         )
     </insert>

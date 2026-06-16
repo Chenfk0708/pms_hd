@@ -1,5 +1,6 @@
 package com.jeez.gateway;
 
+import com.jeez.gateway.config.GatewayAuthProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,9 @@ class GatewayRouteOwnershipTest {
 
     @Autowired
     private RouteDefinitionLocator routeDefinitionLocator;
+
+    @Autowired
+    private GatewayAuthProperties gatewayAuthProperties;
 
     @Test
     @Timeout(60)
@@ -129,6 +133,12 @@ class GatewayRouteOwnershipTest {
                 () -> "room-service route must own price systemConfig actions, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/roomCategoryStatuses/roomCategory/get"),
                 () -> "room-service route must own retail roomCategory status actions, actual Path predicate: " + pathPatterns);
+        assertTrue(pathPatterns.contains("/roomCategoryStatuses/roomCategory/channel/coefficient/save"),
+                () -> "room-service route must own channel product coefficient save, actual Path predicate: " + pathPatterns);
+        assertTrue(pathPatterns.contains("/roomCategoryStatuses/roomCategory/channel/coefficient/batchSave"),
+                () -> "room-service route must own channel product coefficient batch save, actual Path predicate: " + pathPatterns);
+        assertTrue(pathPatterns.contains("/roomCategoryStatuses/roomCategory/channel/price/save"),
+                () -> "room-service route must own channel calendar price save, actual Path predicate: " + pathPatterns);
     }
 
     @Test
@@ -207,6 +217,8 @@ class GatewayRouteOwnershipTest {
                 .collect(Collectors.joining(","));
         assertTrue(pathPatterns.contains("/report/accommodation/get"),
                 () -> "platform-service route must own income report endpoint, actual Path predicate: " + pathPatterns);
+        assertTrue(pathPatterns.contains("/report/open/room/get"),
+                () -> "platform-service route must own sales report endpoint, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/report/profit/get/v2"),
                 () -> "platform-service route must own profit report query endpoint, actual Path predicate: " + pathPatterns);
         assertTrue(pathPatterns.contains("/statistics/profit-report/export"),
@@ -520,6 +532,25 @@ class GatewayRouteOwnershipTest {
                 .collect(Collectors.joining(","));
         assertTrue(pathPatterns.contains("/channelOrders/import"),
                 () -> "order-service route must own channel order import, actual Path predicate: " + pathPatterns);
+    }
+
+    @Test
+    @Timeout(60)
+    void orderRouteOwnsChannelCallbacksAndSkipsPlatformLoginAuth() {
+        List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
+                .collectList()
+                .block(Duration.ofSeconds(10));
+
+        assertNotNull(routes);
+        RouteDefinition orderRoute = findRoute(routes, "order-service");
+        assertNotNull(orderRoute, "Missing gateway route: order-service");
+        String pathPatterns = orderRoute.getPredicates().get(0).getArgs().values().stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        assertTrue(pathPatterns.contains("/channelCallbacks/**"),
+                () -> "order-service route must own third-party channel callbacks, actual Path predicate: " + pathPatterns);
+        assertTrue(gatewayAuthProperties.getExcludePaths().contains("/channelCallbacks/**"),
+                () -> "third-party channel callbacks must use channel callback auth instead of platform login auth");
     }
 
     @Test

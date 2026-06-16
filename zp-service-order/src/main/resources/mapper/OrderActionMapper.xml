@@ -315,6 +315,84 @@
           AND is_deleted = 0
     </update>
 
+    <update id="updateRoomCleanStatus">
+        UPDATE room
+        SET clean_status = #{cleanStatus},
+            updated_at = NOW()
+        WHERE camp_id = #{campId}
+          AND room_id = #{roomId}
+          AND is_deleted = 0
+    </update>
+
+    <select id="countOpenCheckoutCleanTasks" resultType="int">
+        SELECT COUNT(1)
+        FROM clean_task
+        WHERE camp_id = #{campId}
+          AND room_id = #{roomId}
+          AND task_type = 'checkout_clean'
+          AND task_status IN ('pending', 'processing')
+    </select>
+
+    <insert id="insertCheckoutCleanTask">
+        INSERT INTO clean_task (
+            clean_task_id,
+            camp_id,
+            poi_id,
+            room_id,
+            room_category_id,
+            clean_staff_id,
+            task_type,
+            task_status,
+            deadline_at,
+            notify_count,
+            remark,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{cleanTaskId},
+            #{campId},
+            #{poiId},
+            #{roomId},
+            #{roomCategoryId},
+            NULL,
+            'checkout_clean',
+            'pending',
+            #{deadlineAt},
+            0,
+            #{remark},
+            NOW(),
+            NOW()
+        )
+    </insert>
+
+    <insert id="insertCleanLog">
+        INSERT INTO clean_log (
+            clean_log_id,
+            camp_id,
+            poi_id,
+            room_id,
+            room_category_id,
+            clean_task_id,
+            clean_staff_id,
+            operator_id,
+            action_type,
+            action_detail,
+            created_at
+        ) VALUES (
+            #{cleanLogId},
+            #{campId},
+            #{poiId},
+            #{roomId},
+            #{roomCategoryId},
+            #{cleanTaskId},
+            #{cleanStaffId},
+            #{operatorId},
+            #{actionType},
+            #{actionDetail},
+            NOW()
+        )
+    </insert>
+
     <update id="updateGuestRegisteredAt">
         UPDATE order_main
         SET guest_registered_at = #{guestRegisteredAt},

@@ -123,6 +123,65 @@ class CleanerPageQueryIT {
                 .andExpect(jsonPath("$.code").value(40301));
     }
 
+    @Test
+    @Timeout(60)
+    void cleanerSaveAndExport_shouldPersistAndReturnRealRows() throws Exception {
+        seedCleanerPageData();
+
+        mockMvc.perform(post("/cleaner/save")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "name":"Cleaner Save API",
+                                  "mobile":"13900009999",
+                                  "roomScopeText":"Cleaner Save Scope",
+                                  "status":"onDuty"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.saved").value(true))
+                .andExpect(jsonPath("$.data.cleanerId").isString());
+
+        mockMvc.perform(post("/cleaner/page/get")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "keyword":"Cleaner Save API",
+                                  "pageNum":1,
+                                  "pageSize":10
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.list[0].cleanerName").value("Cleaner Save API"))
+                .andExpect(jsonPath("$.data.list[0].mobile").value("13900009999"));
+
+        mockMvc.perform(post("/cleaner/export")
+                        .header(AUTH_VERIFIED_HEADER, "true")
+                        .header(USER_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "campId":"10001",
+                                  "keyword":"Cleaner Save API",
+                                  "pageNum":1,
+                                  "pageSize":10
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.fileName").value("cleaners_" + java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE) + ".csv"))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.rows[0].cleanerName").value("Cleaner Save API"));
+    }
+
     private void seedCleanerPageData() {
         insertRoomCategory(106001L, "Cleaner Page RoomType");
         insertRoom(106011L, "Cleaner Page Room");

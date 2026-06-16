@@ -2,10 +2,15 @@ package com.jeez.zp.room.controller;
 
 import com.jeez.zp.room.api.HudsonResponse;
 import com.jeez.zp.room.api.TraceIdFactory;
+import com.jeez.zp.room.dto.request.ChannelCalendarPriceSaveRequest;
+import com.jeez.zp.room.dto.request.ChannelProductCoefficientBatchSaveRequest;
+import com.jeez.zp.room.dto.request.ChannelProductCoefficientSaveRequest;
 import com.jeez.zp.room.dto.request.RoomCategorySaleStatusSaveRequest;
 import com.jeez.zp.room.dto.request.RoomCategoryStatusRequest;
 import com.jeez.zp.room.security.LoginUserContext;
 import com.jeez.zp.room.service.RoomCategoryStatusService;
+import com.jeez.zp.room.vo.ChannelCalendarPriceSaveResponseVO;
+import com.jeez.zp.room.vo.ChannelProductCoefficientSaveResponseVO;
 import com.jeez.zp.room.vo.RoomCategoryCentralStatusResponseVO;
 import com.jeez.zp.room.vo.RoomCategoryChannelStatusResponseVO;
 import com.jeez.zp.room.vo.RoomCategorySaleStatusSaveResponseVO;
@@ -13,6 +18,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -67,6 +74,75 @@ public class RoomCategoryStatusController {
                         request.getSaleEnabled()
                 ),
                 TraceIdFactory.next("room-category-statuses-central-sale-status-save")
+        );
+    }
+
+    @PostMapping("/roomCategoryStatuses/roomCategory/channel/coefficient/save")
+    public HudsonResponse<ChannelProductCoefficientSaveResponseVO> saveChannelProductCoefficient(
+            @RequestBody ChannelProductCoefficientSaveRequest request
+    ) {
+        return HudsonResponse.success(
+                roomCategoryStatusService.saveChannelProductCoefficient(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getRoomCategoryId(),
+                        request.getChannelId(),
+                        request.getProductName(),
+                        request.getOperator(),
+                        request.getCoefficientValue()
+                ),
+                TraceIdFactory.next("room-category-statuses-channel-coefficient-save")
+        );
+    }
+
+    @PostMapping("/roomCategoryStatuses/roomCategory/channel/coefficient/batchSave")
+    public HudsonResponse<ChannelProductCoefficientSaveResponseVO> batchSaveChannelProductCoefficient(
+            @RequestBody ChannelProductCoefficientBatchSaveRequest request
+    ) {
+        List<RoomCategoryStatusService.ChannelProductCoefficientInput> items =
+                request.getItems() == null ? List.of() : request.getItems().stream()
+                        .map(item -> new RoomCategoryStatusService.ChannelProductCoefficientInput(
+                                item.getRoomCategoryId(),
+                                item.getChannelId(),
+                                item.getProductName(),
+                                item.getOperator(),
+                                item.getCoefficientValue()
+                        ))
+                        .toList();
+        return HudsonResponse.success(
+                roomCategoryStatusService.saveChannelProductCoefficients(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        items
+                ),
+                TraceIdFactory.next("room-category-statuses-channel-coefficient-batch-save")
+        );
+    }
+
+    @PostMapping("/roomCategoryStatuses/roomCategory/channel/price/save")
+    public HudsonResponse<ChannelCalendarPriceSaveResponseVO> saveChannelCalendarPrice(
+            @RequestBody ChannelCalendarPriceSaveRequest request
+    ) {
+        List<RoomCategoryStatusService.ChannelCalendarPriceInput> items =
+                request.getItems() == null ? List.of() : request.getItems().stream()
+                        .map(item -> new RoomCategoryStatusService.ChannelCalendarPriceInput(
+                                item.getRoomCategoryId(),
+                                item.getChannelId(),
+                                item.getProductName(),
+                                item.getDate(),
+                                item.getPriceUpdateType(),
+                                item.getCalendarPrice(),
+                                item.getBasePrice()
+                        ))
+                        .toList();
+        return HudsonResponse.success(
+                roomCategoryStatusService.saveChannelCalendarPrices(
+                        parseLong(request.getCampId()),
+                        LoginUserContext.requiredUserId(),
+                        request.getOverwriteStandalone() == null || Boolean.TRUE.equals(request.getOverwriteStandalone()),
+                        items
+                ),
+                TraceIdFactory.next("room-category-statuses-channel-price-save")
         );
     }
 

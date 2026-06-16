@@ -215,7 +215,11 @@ class RoomQueryIT {
                 .andExpect(jsonPath("$.data.list[0].rooms.length()").value(2))
                 .andExpect(jsonPath("$.data.list[0].rooms[0].roomId").value("103021"))
                 .andExpect(jsonPath("$.data.list[0].rooms[0].roomName").value("M-1301"))
+                .andExpect(jsonPath("$.data.list[0].rooms[0].cleanStatus").value("clean"))
+                .andExpect(jsonPath("$.data.list[0].rooms[0].isDirty").value(0))
                 .andExpect(jsonPath("$.data.list[0].rooms[1].roomId").value("103022"))
+                .andExpect(jsonPath("$.data.list[0].rooms[1].cleanStatus").value("dirty"))
+                .andExpect(jsonPath("$.data.list[0].rooms[1].isDirty").value(1))
                 .andExpect(jsonPath("$.data.pagination.page").value(1))
                 .andExpect(jsonPath("$.data.pagination.pageSize").value(20))
                 .andExpect(jsonPath("$.data.pagination.total").value(1));

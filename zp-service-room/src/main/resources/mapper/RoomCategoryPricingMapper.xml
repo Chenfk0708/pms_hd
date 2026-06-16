@@ -129,6 +129,7 @@
     <select id="selectCentralPriceSnapshots" resultType="com.jeez.zp.room.vo.RoomCategoryPriceSnapshotRowVO">
         SELECT
             CAST(room_category_id AS CHAR) AS roomCategoryId,
+            CAST(channel_id AS CHAR) AS channelId,
             DATE_FORMAT(biz_date, '%Y-%m-%d') AS bizDate,
             price_cent AS priceCent,
             status AS status
@@ -145,6 +146,33 @@
             </foreach>
         </if>
         ORDER BY room_category_id ASC, biz_date ASC, updated_at DESC, id DESC
+    </select>
+
+    <select id="selectChannelPriceSnapshots" resultType="com.jeez.zp.room.vo.RoomCategoryPriceSnapshotRowVO">
+        SELECT
+            CAST(room_category_id AS CHAR) AS roomCategoryId,
+            CAST(channel_id AS CHAR) AS channelId,
+            DATE_FORMAT(biz_date, '%Y-%m-%d') AS bizDate,
+            price_cent AS priceCent,
+            status AS status
+        FROM room_price_snapshot
+        WHERE camp_id = #{campId}
+          AND price_type = 'channel'
+          AND biz_date &gt;= #{startDate}
+          AND biz_date &lt;= #{endDate}
+        <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">
+            AND room_category_id IN
+            <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                #{roomCategoryId}
+            </foreach>
+        </if>
+        <if test="channelIds != null and channelIds.size() > 0">
+            AND channel_id IN
+            <foreach collection="channelIds" item="channelId" open="(" separator="," close=")">
+                #{channelId}
+            </foreach>
+        </if>
+        ORDER BY room_category_id ASC, channel_id ASC, biz_date ASC, updated_at DESC, id DESC
     </select>
 
     <select id="selectAvailableStockRows" resultType="com.jeez.zp.room.vo.RoomCategoryAvailableStockRowVO">
@@ -223,6 +251,60 @@
         ORDER BY c.room_category_id ASC, d.biz_date ASC
     </select>
 
+    <select id="selectProductCoefficients" resultType="com.jeez.zp.room.vo.ChannelProductCoefficientRowVO">
+        SELECT
+            CAST(camp_id AS CHAR) AS campId,
+            CAST(room_category_id AS CHAR) AS roomCategoryId,
+            CAST(channel_id AS CHAR) AS channelId,
+            product_name AS productName,
+            operator_type AS operator,
+            coefficient_value AS coefficientValue,
+            CONCAT(operator_type, TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM coefficient_value))) AS expressValue
+        FROM channel_product_price_coefficient
+        WHERE camp_id = #{campId}
+        <if test="roomCategoryIds != null and roomCategoryIds.size() > 0">
+            AND room_category_id IN
+            <foreach collection="roomCategoryIds" item="roomCategoryId" open="(" separator="," close=")">
+                #{roomCategoryId}
+            </foreach>
+        </if>
+        <if test="channelIds != null and channelIds.size() > 0">
+            AND channel_id IN
+            <foreach collection="channelIds" item="channelId" open="(" separator="," close=")">
+                #{channelId}
+            </foreach>
+        </if>
+        ORDER BY room_category_id ASC, channel_id ASC, product_name ASC
+    </select>
+
+    <insert id="upsertProductCoefficient">
+        INSERT INTO channel_product_price_coefficient (
+            id,
+            camp_id,
+            room_category_id,
+            channel_id,
+            product_name,
+            operator_type,
+            coefficient_value,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{id},
+            #{campId},
+            #{roomCategoryId},
+            #{channelId},
+            #{productName},
+            #{operator},
+            #{coefficientValue},
+            NOW(),
+            NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            operator_type = VALUES(operator_type),
+            coefficient_value = VALUES(coefficient_value),
+            updated_at = NOW()
+    </insert>
+
     <insert id="upsertCentralSaleStatus">
         INSERT INTO room_price_snapshot (
             id,
@@ -260,6 +342,58 @@
             price_cent = VALUES(price_cent),
             status = VALUES(status),
             updated_at = NOW()
+    </insert>
+
+    <insert id="saveChannelPriceSnapshot">
+        INSERT INTO room_price_snapshot (
+            id,
+            camp_id,
+            poi_id,
+            room_category_id,
+            biz_date,
+            price_type,
+            channel_id,
+            price_cent,
+            currency,
+            status,
+            created_at,
+            updated_at
+        )
+        SELECT
+            #{id},
+            rc.camp_id,
+            rc.poi_id,
+            rc.room_category_id,
+            #{bizDate},
+            'channel',
+            #{channelId},
+            #{priceCent},
+            'CNY',
+            'active',
+            NOW(),
+            NOW()
+        FROM room_category rc
+        WHERE rc.camp_id = #{campId}
+          AND rc.room_category_id = #{roomCategoryId}
+          AND rc.status = 1
+          AND rc.is_deleted = 0
+        <if test="overwriteStandalone == false">
+          AND NOT EXISTS (
+              SELECT 1
+              FROM room_price_snapshot existing
+              WHERE existing.camp_id = rc.camp_id
+                AND existing.room_category_id = rc.room_category_id
+                AND existing.biz_date = #{bizDate}
+                AND existing.price_type = 'channel'
+                AND existing.channel_id = #{channelId}
+          )
+        </if>
+        <if test="overwriteStandalone == true">
+        ON DUPLICATE KEY UPDATE
+            price_cent = VALUES(price_cent),
+            status = VALUES(status),
+            updated_at = NOW()
+        </if>
     </insert>
 
     <select id="selectRetailRows" resultType="com.jeez.zp.room.vo.RoomCategoryPricingRowVO">

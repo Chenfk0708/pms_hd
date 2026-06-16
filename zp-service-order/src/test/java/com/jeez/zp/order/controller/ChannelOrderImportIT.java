@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "jeez.channel.callback.test-token=channel-callback-test-token")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
@@ -28,6 +28,9 @@ class ChannelOrderImportIT {
 
     private static final String AUTH_VERIFIED_HEADER = "X-Auth-Verified";
     private static final String USER_ID_HEADER = "X-User-Id";
+    private static final String CHANNEL_TEST_TOKEN_HEADER = "X-Channel-Test-Token";
+    private static final String CHANNEL_OPERATOR_ID_HEADER = "X-Channel-Operator-Id";
+    private static final String CHANNEL_TEST_TOKEN = "channel-callback-test-token";
     private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
     private static final long CAMP_ID = 10001L;
     private static final long ACCOUNT_ID = 25351L;
@@ -48,6 +51,90 @@ class ChannelOrderImportIT {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Test
+    @Timeout(60)
+    void channelCallbacksOrderImport_shouldCreateOrderWithoutInternalGatewayHeaders() throws Exception {
+        prepareChannelMapping();
+        LocalDate checkIn = LocalDate.now(SHANGHAI_ZONE).plusDays(26);
+        LocalDate checkOut = checkIn.plusDays(1);
+        String outOrderNo = "MT-CB-202606100001";
+
+        mockMvc.perform(post("/channelCallbacks/{channelCode}/orders/import", CHANNEL_CODE)
+                        .header(CHANNEL_TEST_TOKEN_HEADER, CHANNEL_TEST_TOKEN)
+                        .header(CHANNEL_OPERATOR_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(callbackImportPayload(outOrderNo, OUT_ROOM_CATEGORY_ID, checkIn, checkOut)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.outOrderNo").value(outOrderNo))
+                .andExpect(jsonPath("$.data.accountId").value(String.valueOf(ACCOUNT_ID)))
+                .andExpect(jsonPath("$.data.channelName").value(CHANNEL_NAME))
+                .andExpect(jsonPath("$.data.created").value(true));
+
+        var order = jdbcTemplate.queryForMap(
+                """
+                        SELECT source_type, source_label_snapshot, room_category_id, room_id
+                        FROM order_main
+                        WHERE camp_id = ? AND out_order_no = ?
+                        """,
+                CAMP_ID,
+                ACCOUNT_ID + ":" + outOrderNo
+        );
+        assertThat(order.get("source_type")).isEqualTo("channel");
+        assertThat(order.get("source_label_snapshot")).isEqualTo(CHANNEL_NAME);
+        assertThat(((Number) order.get("room_category_id")).longValue())
+                .isEqualTo(OrderTestCatalogFixture.STANDARD_ROOM_CATEGORY_ID);
+        assertThat(((Number) order.get("room_id")).longValue())
+                .isEqualTo(OrderTestCatalogFixture.STANDARD_ROOM_ID);
+
+        var raw = jdbcTemplate.queryForMap(
+                """
+                        SELECT import_status, channel_code, raw_payload
+                        FROM channel_order_raw
+                        WHERE account_id = ? AND out_order_no = ?
+                        """,
+                ACCOUNT_ID,
+                outOrderNo
+        );
+        assertThat(raw.get("import_status")).isEqualTo("success");
+        assertThat(raw.get("channel_code")).isEqualTo(CHANNEL_CODE);
+        assertThat(String.valueOf(raw.get("raw_payload"))).contains("third-party-callback-test");
+    }
+
+    @Test
+    @Timeout(60)
+    void channelCallbacksOrderImport_shouldRejectMissingTestTokenWithoutCreatingOrder() throws Exception {
+        prepareChannelMapping();
+        LocalDate checkIn = LocalDate.now(SHANGHAI_ZONE).plusDays(27);
+        LocalDate checkOut = checkIn.plusDays(1);
+        String outOrderNo = "MT-CB-202606100401";
+
+        mockMvc.perform(post("/channelCallbacks/{channelCode}/orders/import", CHANNEL_CODE)
+                        .header(CHANNEL_OPERATOR_ID_HEADER, "12001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(callbackImportPayload(outOrderNo, OUT_ROOM_CATEGORY_ID, checkIn, checkOut)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("第三方渠道回调认证失败"));
+
+        Integer orderCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM order_main WHERE camp_id = ? AND out_order_no = ?",
+                Integer.class,
+                CAMP_ID,
+                ACCOUNT_ID + ":" + outOrderNo
+        );
+        Integer rawCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM channel_order_raw WHERE account_id = ? AND out_order_no = ?",
+                Integer.class,
+                ACCOUNT_ID,
+                outOrderNo
+        );
+        assertThat(orderCount).isZero();
+        assertThat(rawCount).isZero();
+    }
 
     @Test
     @Timeout(60)
@@ -502,6 +589,45 @@ class ChannelOrderImportIT {
 
     private String importPayload(String outOrderNo, String outRoomCategoryId, LocalDate checkIn, LocalDate checkOut) {
         return importPayload(CHANNEL_CODE, ACCOUNT_ID, outOrderNo, outRoomCategoryId, checkIn, checkOut);
+    }
+
+    private String callbackImportPayload(
+            String outOrderNo,
+            String outRoomCategoryId,
+            LocalDate checkIn,
+            LocalDate checkOut
+    ) {
+        return """
+                {
+                  "accountId":"%s",
+                  "outOrderNo":"%s",
+                  "outPoiId":"%s",
+                  "outRoomCategoryId":"%s",
+                  "contactName":"Channel Import Guest",
+                  "contactMobile":"13800138000",
+                  "checkInDate":"%s",
+                  "checkOutDate":"%s",
+                  "quantity":1,
+                  "totalPrice":28800,
+                  "totalPayPrice":27600,
+                  "commissionPrice":1200,
+                  "paymentStatus":"paid",
+                  "channelStatus":"confirmed",
+                  "remark":"channel callback import test",
+                  "rawPayload":{
+                    "source":"third-party-callback-test",
+                    "externalRoomCategoryId":"%s"
+                  }
+                }
+                """.formatted(
+                ACCOUNT_ID,
+                outOrderNo,
+                OUT_POI_ID,
+                outRoomCategoryId,
+                checkIn,
+                checkOut,
+                outRoomCategoryId
+        );
     }
 
     private String importPayload(
